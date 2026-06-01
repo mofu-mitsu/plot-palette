@@ -20,11 +20,14 @@ export default defineConfig({
     },
   },
   envDir: __dirname,
-  root: "client",
-  publicDir: "public",
+  root: path.resolve(__dirname, "client"),
+  publicDir: path.resolve(__dirname, "client", "public"),
   build: {
-    outDir: "../dist/public",
+    outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      input: path.resolve(__dirname, "client", "index.html"),
+    },
   },
   server: {
     host: "0.0.0.0",
