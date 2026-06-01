@@ -1,0 +1,6 @@
+{
+  "name": "Plot Palette",
+  "description": "小説・漫画のプロット・設定管理ツール",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
