@@ -104,7 +104,7 @@ export default function Login() {
         {/* フッター */}
         <div className="text-center mt-8">
           <p className="text-xs text-muted-foreground">
-            💕 みつきの創作を応援します 💕
+            💕 あなたの創作を応援します 💕
           </p>
         </div>
       </div>
