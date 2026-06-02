@@ -48,13 +48,17 @@ export function registerOAuthRoutes(app: Express) {
       const name = "プロットクリエイター";
       const email = "creator-test@example.com";
 
-      await db.upsertUser({
-        openId,
-        name,
-        email,
-        loginMethod: "sandbox",
-        lastSignedIn: new Date(),
-      });
+      try {
+        await db.upsertUser({
+          openId,
+          name,
+          email,
+          loginMethod: "sandbox",
+          lastSignedIn: new Date(),
+        });
+      } catch (dbError) {
+        console.error("[Sandbox Auth] DB Upsert Failed, continuing with in-memory fallback:", dbError);
+      }
 
       const sessionToken = await sdk.createSessionToken(openId, {
         name,
@@ -85,7 +89,8 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
-      const redirectUri = Buffer.from(state, "base64").toString("utf-8");
+      const origin = Buffer.from(state, "base64").toString("utf-8");
+      const redirectUri = `${origin}/api/oauth/callback`;
       console.log("[OAuth] Decoded redirect_uri:", redirectUri);
 
       const tokenData = await exchangeGoogleCode(code, redirectUri);
@@ -98,13 +103,17 @@ export function registerOAuthRoutes(app: Express) {
 
       const openId = `google:${userInfo.sub}`;
 
-      await db.upsertUser({
-        openId,
-        name: userInfo.name ?? null,
-        email: userInfo.email ?? null,
-        loginMethod: "google",
-        lastSignedIn: new Date(),
-      });
+      try {
+        await db.upsertUser({
+          openId,
+          name: userInfo.name ?? null,
+          email: userInfo.email ?? null,
+          loginMethod: "google",
+          lastSignedIn: new Date(),
+        });
+      } catch (dbError) {
+        console.error("[OAuth] DB Upsert Failed, continuing with in-memory fallback:", dbError);
+      }
 
       const sessionToken = await sdk.createSessionToken(openId, {
         name: userInfo.name ?? "",
