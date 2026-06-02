@@ -45,8 +45,8 @@ export function registerOAuthRoutes(app: Express) {
   app.get("/api/auth/sandbox", async (req: Request, res: Response) => {
     try {
       const openId = "google:sandbox-test-user-12345";
-      const name = "みつき (Test)";
-      const email = "mitsuki-test@example.com";
+      const name = "プロットクリエイター";
+      const email = "creator-test@example.com";
 
       await db.upsertUser({
         openId,

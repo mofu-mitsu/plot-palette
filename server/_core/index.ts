@@ -1,6 +1,5 @@
 import express from "express";
 import { createServer } from "http";
-import cookieParser from "cookie-parser";
 import { setupVite, serveStatic } from "./vite";
 import { registerOAuthRoutes } from "./oauth";
 import { sdk } from "./sdk";
@@ -14,7 +13,24 @@ const server = createServer(app);
 const PORT = 3000;
 
 app.use(express.json());
-app.use(cookieParser());
+
+// Custom simple cookie parsing middleware
+app.use((req: any, res, next) => {
+  const cookies: Record<string, string> = {};
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    cookieHeader.split(";").forEach((cookie: string) => {
+      const parts = cookie.split("=");
+      const name = parts[0].trim();
+      const value = parts.slice(1).join("=").trim();
+      if (name) {
+        cookies[name] = decodeURIComponent(value);
+      }
+    });
+  }
+  req.cookies = cookies;
+  next();
+});
 
 // Auth Route Handlers
 registerOAuthRoutes(app);
@@ -24,7 +40,7 @@ app.use(async (req: any, res, next) => {
   const token = req.cookies[COOKIE_NAME];
   if (token) {
     try {
-      const session = await sdk.verifySessionToken(token);
+      const session = await sdk.verifySession(token);
       if (session) {
         req.user = session;
       }
@@ -285,6 +301,16 @@ app.get("/api/me", (req: any, res) => {
   } else {
     res.status(401).json({ error: "Unauthorized" });
   }
+});
+
+app.post("/api/logout", (req: any, res) => {
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production" || req.secure,
+    sameSite: "none",
+    path: "/",
+  });
+  res.json({ success: true });
 });
 
 async function start() {

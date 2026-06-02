@@ -240,7 +240,7 @@ export default function App() {
   }
 
   // Determine actual display name (friendly Greet)
-  const displayName = user.name.includes("Test") || user.name.includes("みつき") ? "みつき" : user.name;
+  const displayName = user.name || "作家";
 
   return (
     <div className="min-h-screen bg-slate-50/50 text-slate-800 font-sans">
@@ -264,7 +264,7 @@ export default function App() {
         <div className="flex items-center gap-6">
           <span className="text-sm font-semibold text-slate-600 flex items-center gap-2">
             <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            おかえりなさい、<strong className="text-pink-500 font-bold">{displayName}</strong>先生！🌸
+            ようこそ、<strong className="text-pink-500 font-bold">{displayName}</strong> 先生！🎨
           </span>
           <button
             onClick={handleLogout}
@@ -289,7 +289,7 @@ export default function App() {
                 <span className="bg-white/20 backdrop-blur-md px-3.5 py-1 rounded-full text-xs font-bold tracking-wider uppercase">創作スタジオ🎨</span>
                 <h2 className="text-3xl font-black mt-4 mb-2 tracking-tight">あなたの心に描いた物語を紡ぎましょう✨</h2>
                 <p className="text-pink-50/90 text-sm leading-relaxed mb-6">
-                  Plot Palette（プロットパレット）へようこそ！ここはあなたの想像力を豊かに広げ、プロットやキャラクター設定を1ヶ所で美しく整理するアトリエです。心配ごとは置いて、好きな創作に浸りましょう💕
+                  Plot Palette（プロットパレット）へようこそ！ここはあなたの想像力を豊かに広げ、プロットやキャラクター設定を1ヶ所で美しく整理するクリエイティブ・アトリエです。あなただけの素晴らしい物語を紡ぎ出しましょう。
                 </p>
                 <button
                   onClick={() => setShowNovelModal(true)}
@@ -904,7 +904,7 @@ export default function App() {
       {/* フッター */}
       <footer className="mt-16 border-t border-slate-100 py-8 bg-white/20">
         <p className="text-center text-xs text-slate-400 font-semibold">
-          🎨 Plot Palette &copy; 2026 / Crafted by ジェミ with love 💕
+          🎨 Plot Palette &copy; 2026 / Designed for Creators
         </p>
       </footer>
     </div>
