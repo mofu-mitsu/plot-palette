@@ -1,11 +1,17 @@
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { ForbiddenError } from "@shared/_core/errors";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../../shared/const";
 import { parse as parseCookieHeader } from "cookie";
 import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
+
+class ForbiddenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ForbiddenError";
+  }
+}
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;

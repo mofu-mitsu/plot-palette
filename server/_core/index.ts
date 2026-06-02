@@ -3,7 +3,7 @@ import { createServer } from "http";
 import { setupVite, serveStatic } from "./vite";
 import { registerOAuthRoutes } from "./oauth";
 import { sdk } from "./sdk";
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME } from "../../shared/const";
 import { getDb } from "../db";
 import { users, novels, plots, characters } from "../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
