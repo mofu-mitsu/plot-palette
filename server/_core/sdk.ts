@@ -117,10 +117,7 @@ class SDKServer {
       throw ForbiddenError("User not found, please log in again");
     }
 
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt,
-    });
+    await db.updateUserLastSignedIn(user.openId, signedInAt);
 
     return user;
   }

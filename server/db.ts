@@ -19,6 +19,19 @@ export function getDb() {
 }
 
 // User Actions
+export async function getUserByOpenId(openId: string) {
+  const dbConnection = getDb();
+  if (!dbConnection) return null;
+  const result = await dbConnection.select().from(users).where(eq(users.openId, openId)).limit(1);
+  return result[0] || null;
+}
+
+export async function updateUserLastSignedIn(openId: string, lastSignedIn: Date) {
+  const dbConnection = getDb();
+  if (!dbConnection) return;
+  await dbConnection.update(users).set({ lastSignedIn }).where(eq(users.openId, openId));
+}
+
 export async function upsertUser(userData: {
   openId: string;
   name: string | null;
