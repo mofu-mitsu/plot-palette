@@ -11,7 +11,15 @@ const getDirname = () => {
   if (typeof __dirname !== "undefined") {
     return __dirname;
   }
-  return path.dirname(fileURLToPath(import.meta.url));
+  try {
+    const metaUrl = (import.meta as any)?.url;
+    if (metaUrl) {
+      return path.dirname(fileURLToPath(metaUrl));
+    }
+  } catch (e) {
+    // Ignore error
+  }
+  return process.cwd();
 };
 const __localDirname = getDirname();
 
