@@ -223,6 +223,35 @@ export default function App() {
     }
   };
 
+  const handleDeletePlot = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!selectedNovel || !confirm("このプロットを削除しますか？")) return;
+    
+    try {
+      const res = await fetch(`/api/novels/${selectedNovel.id}/plots/${id}`, { method: "DELETE" });
+      // JSON instead of throwing on 404, usually we just update state
+      if (res.ok) {
+        setPlots(plots.filter((p) => p.id !== id));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteCharacter = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!selectedNovel || !confirm("このキャラクター設定を削除しますか？")) return;
+    
+    try {
+      const res = await fetch(`/api/novels/${selectedNovel.id}/characters/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setCharacters(characters.filter((c) => c.id !== id));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-pink-50/30">
@@ -484,9 +513,17 @@ export default function App() {
                             {plot.content || "エピソード詳細がまだ書かれていません。クリックして物語を描きましょう！"}
                           </p>
                         </div>
-                        <span className="text-xs text-slate-350 font-semibold self-center">
-                          詳細表示 <i className="fas fa-chevron-right ml-1"></i>
-                        </span>
+                        <div className="flex flex-col gap-2 self-center items-end">
+                          <span className="text-xs text-slate-350 font-semibold flex items-center">
+                            詳細表示 <i className="fas fa-chevron-right ml-1"></i>
+                          </span>
+                          <button
+                            onClick={(e) => handleDeletePlot(plot.id, e)}
+                            className="text-xs text-slate-300 hover:text-rose-500 transition"
+                          >
+                            <i className="fas fa-trash-alt"></i> 削除
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -504,15 +541,26 @@ export default function App() {
                     <p className="text-slate-400 text-sm mb-6">
                       物語の魂である主人公、ライバルや導き手の登場人物を創り上げて、お互いの関係性を紡ぎましょう。
                     </p>
-                    <button
-                      onClick={() => setShowCharModal(true)}
-                      className="bg-indigo-100 text-indigo-600 font-bold text-xs px-4 py-2 rounded-full transition hover:bg-indigo-200"
-                    >
-                      登場人物を創る
-                    </button>
+                    <div className="flex justify-center gap-3">
+                      <button
+                        onClick={() => setShowCharModal(true)}
+                        className="bg-indigo-100 text-indigo-600 font-bold text-xs px-4 py-2 rounded-full transition hover:bg-indigo-200"
+                      >
+                        登場人物を創る
+                      </button>
+                      <a href="https://mofu-mitsu.github.io/orikyara-relationship-chart/" target="_blank" rel="noreferrer" className="bg-slate-100 text-slate-600 font-bold text-xs px-4 py-2 rounded-full transition hover:bg-slate-200 flex items-center gap-1.5">
+                        <i className="fas fa-project-diagram"></i> 相関図メーカーを使う
+                      </a>
+                    </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div>
+                    <div className="flex justify-end mb-4">
+                      <a href="https://mofu-mitsu.github.io/orikyara-relationship-chart/" target="_blank" rel="noreferrer" className="bg-slate-100 text-slate-600 font-bold text-xs px-4 py-2 rounded-full transition hover:bg-slate-200 flex items-center gap-1.5">
+                        <i className="fas fa-project-diagram"></i> 外部アプリ: 相関図メーカーを使う
+                      </a>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {characters.map((char) => (
                       <div
                         key={char.id}
@@ -524,9 +572,17 @@ export default function App() {
                             <span className="bg-indigo-100 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded">
                               {char.role || "設定なし"}
                             </span>
-                            {char.age && (
-                              <span className="text-xs text-slate-400 font-semibold">{char.age}歳</span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {char.age && (
+                                <span className="text-xs text-slate-400 font-semibold">{char.age}歳</span>
+                              )}
+                              <button
+                                onClick={(e) => handleDeleteCharacter(char.id, e)}
+                                className="text-slate-300 hover:text-rose-500 transition ml-2"
+                              >
+                                <i className="fas fa-trash-alt"></i>
+                              </button>
+                            </div>
                           </div>
                           <h5 className="text-lg font-bold text-slate-800 mb-2">{char.name}</h5>
                           <p className="text-slate-400 text-xs line-clamp-3 leading-relaxed mb-4">
@@ -541,6 +597,7 @@ export default function App() {
                         )}
                       </div>
                     ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -593,15 +650,28 @@ export default function App() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  カバー画像のURL (Unsplash等の画像アドレス)
+                  カバー画像 (アップロード)
                 </label>
                 <input
-                  type="url"
-                  value={newNovelCover}
-                  onChange={(e) => setNewNovelCover(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        setNewNovelCover(event.target?.result as string);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-pink-400 focus:border-pink-400 outline-none transition text-sm text-slate-800"
                 />
+                {newNovelCover && (
+                  <div className="mt-3">
+                    <img src={newNovelCover} alt="Preview" className="h-24 w-auto rounded-lg shadow-sm border border-slate-100" />
+                  </div>
+                )}
               </div>
               <div className="pt-4 flex justify-end gap-3">
                 <button

@@ -73,9 +73,9 @@ export function registerOAuthRoutes(app: Express) {
         maxAge: ONE_YEAR_MS 
       });
       res.redirect(302, "/");
-    } catch (error) {
+    } catch (error: any) {
       console.error("[Sandbox Auth] Failed:", error);
-      res.status(500).json({ error: "Sandbox auth failed" });
+      res.status(500).json({ error: "Sandbox auth failed", message: error?.message, stack: error?.stack });
     }
   });
 
@@ -144,7 +144,7 @@ export function registerOAuthRoutes(app: Express) {
       } else {
         console.error("[OAuth] Unknown error:", error);
       }
-      res.status(500).json({ error: "OAuth callback failed" });
+      res.status(500).json({ error: "OAuth callback failed", message: (error as any)?.message });
     }
   });
 }

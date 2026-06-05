@@ -235,6 +235,21 @@ app.post("/api/novels/:novelId/plots", requireAuth, async (req: any, res) => {
   res.json(newPlot);
 });
 
+app.delete("/api/novels/:novelId/plots/:id", requireAuth, async (req: any, res) => {
+  const { novelId, id } = req.params;
+  const dbConnection = getDb();
+  if (dbConnection) {
+    try {
+      await dbConnection.delete(plots).where(eq(plots.id, id));
+      return res.json({ success: true });
+    } catch (e) {
+      console.error("[API] Failed to delete plot in DB:", e);
+    }
+  }
+  mockDb.plots = mockDb.plots.filter(p => p.id !== id);
+  res.json({ success: true });
+});
+
 // --- Characters API ---
 app.get("/api/novels/:novelId/characters", requireAuth, async (req: any, res) => {
   const { novelId } = req.params;
@@ -293,6 +308,21 @@ app.post("/api/novels/:novelId/characters", requireAuth, async (req: any, res) =
   };
   mockDb.characters.push(newChar);
   res.json(newChar);
+});
+
+app.delete("/api/novels/:novelId/characters/:id", requireAuth, async (req: any, res) => {
+  const { novelId, id } = req.params;
+  const dbConnection = getDb();
+  if (dbConnection) {
+    try {
+      await dbConnection.delete(characters).where(eq(characters.id, id));
+      return res.json({ success: true });
+    } catch (e) {
+      console.error("[API] Failed to delete character in DB:", e);
+    }
+  }
+  mockDb.characters = mockDb.characters.filter(c => c.id !== id);
+  res.json({ success: true });
 });
 
 app.get("/api/me", (req: any, res) => {

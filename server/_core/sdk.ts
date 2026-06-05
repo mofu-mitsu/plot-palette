@@ -117,15 +117,29 @@ class SDKServer {
 
     const sessionUserId = session.openId;
     const signedInAt = new Date();
-    const user = await db.getUserByOpenId(sessionUserId);
+    
+    // Check if DB is configured
+    const dbConnection = db.getDb();
+    if (dbConnection) {
+      const user = await db.getUserByOpenId(sessionUserId);
 
-    if (!user) {
-      throw ForbiddenError("User not found, please log in again");
+      if (!user) {
+        throw new ForbiddenError("User not found, please log in again");
+      }
+
+      await db.updateUserLastSignedIn(user.openId, signedInAt);
+      return user;
     }
 
-    await db.updateUserLastSignedIn(user.openId, signedInAt);
-
-    return user;
+    // Fallback if no DB is configured: return a mock user based on the session token
+    return {
+      openId: sessionUserId,
+      name: session.name,
+      email: null,
+      loginMethod: sessionUserId.startsWith("google:sandbox") ? "sandbox" : "google",
+      lastSignedIn: signedInAt,
+      createdAt: new Date(),
+    } as User;
   }
 }
 
