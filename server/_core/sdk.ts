@@ -2,7 +2,8 @@ import { COOKIE_NAME, ONE_YEAR_MS } from "../../shared/const";
 import { parse as parseCookieHeader } from "cookie";
 import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
-import type { User } from "../../drizzle/schema";
+import { users } from "../../drizzle/schema";
+export type User = typeof users.$inferSelect;
 import * as db from "../db";
 import { ENV } from "./env";
 
@@ -112,7 +113,7 @@ class SDKServer {
     const session = await this.verifySession(sessionCookie);
 
     if (!session) {
-      throw ForbiddenError("Invalid session cookie");
+      throw new ForbiddenError("Invalid session cookie");
     }
 
     const sessionUserId = session.openId;
