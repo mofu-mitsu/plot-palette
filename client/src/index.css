@@ -1,23 +1,155 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #ffffff;
-  --color-foreground: #0f172a;
-  
-  --color-primary: #ec4899; /* pink-500 */
-  --color-primary-foreground: #ffffff;
-  
-  --color-secondary: #f1f5f9;
-  --color-secondary-foreground: #0f172a;
-  
-  --color-muted: #f8fafc;
-  --color-muted-foreground: #64748b;
-  
-  --color-accent: #fbcfe8; /* pink-200 */
-  --color-accent-foreground: #0f172a;
-
-  --color-border: #e2e8f0;
-  --color-input: #e2e8f0;
-  --color-ring: #ec4899;
+  --color-background: var(--bg-app, #ffffff);
+  --color-foreground: var(--text-main, #0f172a);
 }
 
+/* 各カラーテーマの変数を定義 */
+.palette-light {
+  --bg-app: #fdfbfc;
+  --bg-card: #ffffff;
+  --bg-sidebar: #f8f6f6;
+  --text-main: #1f2937;
+  --text-muted: #6b7280;
+  --border-color: #f5e3e6;
+  --accent-color: #ec4899;
+  --accent-light: #fef1f2;
+}
+
+.palette-dark {
+  --bg-app: #0f1015;
+  --bg-card: #161720;
+  --bg-sidebar: #12131a;
+  --text-main: #f3f4f6;
+  --text-muted: #9ca3af;
+  --border-color: #282a36;
+  --accent-color: #f43f5e;
+  --accent-light: rgba(244, 63, 94, 0.1);
+}
+
+.palette-sakura {
+  --bg-app: #fff5f6;
+  --bg-card: #ffffff;
+  --bg-sidebar: #ffe4e6;
+  --text-main: #4c0519;
+  --text-muted: #9f1239;
+  --border-color: #fecdd3;
+  --accent-color: #db2777;
+  --accent-light: #fff1f2;
+}
+
+.palette-parchment {
+  --bg-app: #fcf8f2;
+  --bg-card: #fdfaf6;
+  --bg-sidebar: #f4ece1;
+  --text-main: #4a3728;
+  --text-muted: #785c43;
+  --border-color: #e6dac6;
+  --accent-color: #b45309;
+  --accent-light: #fdf3e7;
+}
+
+.palette-night {
+  --bg-app: #0a0e1a;
+  --bg-card: #111a2e;
+  --bg-sidebar: #101424;
+  --text-main: #e2e8f0;
+  --text-muted: #94a3b8;
+  --border-color: #1e293b;
+  --accent-color: #38bdf8;
+  --accent-light: rgba(56, 189, 248, 0.1);
+}
+
+.palette-manuscript {
+  --bg-app: #f4fcf6;
+  --bg-card: #ffffff;
+  --bg-sidebar: #e1f4e7;
+  --text-main: #064e3b;
+  --text-muted: #0f766e;
+  --border-color: #a7f3d0;
+  --accent-color: #10b981;
+  --accent-light: #ecfdf5;
+}
+
+.palette-custom {
+  --bg-app: var(--custom-bg, #fff5f6);
+  --bg-card: var(--custom-card, #ffffff);
+  --bg-sidebar: var(--custom-bg, #fff5f6);
+  --text-main: var(--custom-text, #4c0519);
+  --border-color: var(--custom-border, #fecdd3);
+  --accent-color: var(--custom-accent, #db2777);
+  --accent-light: var(--custom-accent-light, #fff1f2);
+}
+
+/* パレット共通上書きルール - 全カラーパレットの適用時に無反応になるのを防止 */
+.palette-light, .palette-dark, .palette-sakura, .palette-parchment, .palette-night, .palette-manuscript, .palette-custom {
+  background-color: var(--bg-app) !important;
+  color: var(--text-main) !important;
+}
+
+/* 各パレット時のカード・枠・フォーム・文字の強制調色 */
+.palette-light .bg-white, .palette-dark .bg-white, .palette-sakura .bg-white, .palette-parchment .bg-white, .palette-night .bg-white, .palette-manuscript .bg-white, .palette-custom .bg-white,
+.palette-light .bg-slate-50, .palette-dark .bg-slate-50, .palette-sakura .bg-slate-50, .palette-parchment .bg-slate-50, .palette-night .bg-slate-50, .palette-manuscript .bg-slate-50, .palette-custom .bg-slate-50,
+.palette-light .bg-slate-100, .palette-dark .bg-slate-100, .palette-sakura .bg-slate-100, .palette-parchment .bg-slate-100, .palette-night .bg-slate-100, .palette-manuscript .bg-slate-100, .palette-custom .bg-slate-100,
+.palette-light .bg-rose-50\/20, .palette-dark .bg-rose-50\/20, .palette-sakura .bg-rose-50\/20, .palette-custom .bg-rose-50\/20 {
+  background-color: var(--bg-card) !important;
+  color: var(--text-main) !important;
+}
+
+.palette-light .border-slate-100, .palette-dark .border-slate-100, .palette-sakura .border-slate-100, .palette-parchment .border-slate-100, .palette-night .border-slate-100, .palette-manuscript .border-slate-100, .palette-custom .border-slate-100,
+.palette-light .border-slate-200, .palette-dark .border-slate-200, .palette-sakura .border-slate-200, .palette-parchment .border-slate-200, .palette-night .border-slate-200, .palette-manuscript .border-slate-200, .palette-custom .border-slate-200,
+.palette-light .border-pink-200, .palette-dark .border-pink-200, .palette-sakura .border-pink-200, .palette-parchment .border-pink-200, .palette-night .border-pink-200, .palette-manuscript .border-pink-200, .palette-custom .border-pink-200,
+.palette-light .border-amber-900\/15, .palette-dark .border-amber-900\/15, .palette-custom .border-amber-900\/15 {
+  border-color: var(--border-color) !important;
+}
+
+.palette-light .text-slate-800, .palette-dark .text-slate-800, .palette-sakura .text-slate-800, .palette-parchment .text-slate-800, .palette-night .text-slate-800, .palette-manuscript .text-slate-800, .palette-custom .text-slate-800,
+.palette-light .text-slate-700, .palette-dark .text-slate-700, .palette-sakura .text-slate-700, .palette-parchment .text-slate-700, .palette-night .text-slate-700, .palette-manuscript .text-slate-700, .palette-custom .text-slate-700,
+.palette-light .text-slate-600, .palette-dark .text-slate-600, .palette-sakura .text-slate-600, .palette-parchment .text-slate-600, .palette-night .text-slate-600, .palette-manuscript .text-slate-600, .palette-custom .text-slate-600,
+.palette-light .text-amber-955, .palette-dark .text-amber-955, .palette-sakura .text-amber-955, .palette-custom .text-amber-955,
+.palette-light .text-rose-950, .palette-dark .text-rose-950, .palette-sakura .text-rose-950, .palette-custom .text-rose-950 {
+  color: var(--text-main) !important;
+}
+
+.palette-light input, .palette-dark input, .palette-sakura input, .palette-parchment input, .palette-night input, .palette-manuscript input, .palette-custom input,
+.palette-light textarea, .palette-dark textarea, .palette-sakura textarea, .palette-parchment textarea, .palette-night textarea, .palette-manuscript textarea, .palette-custom textarea,
+.palette-light select, .palette-dark select, .palette-sakura select, .palette-parchment select, .palette-night select, .palette-manuscript select, .palette-custom select {
+  background-color: var(--bg-card) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* 常にアクセントを反映 */
+.text-pink-500, .text-pink-600, .text-pink-700 {
+  color: var(--accent-light, var(--accent-color)) !important;
+}
+
+/* 印刷（PDF書き出し）のための専用スタイル */
+@media print {
+  /* 印刷時は画面全体のレンダリングを非表示に */
+  body * {
+    visibility: hidden;
+  }
+  /* 印刷専用エリアのみを表示 */
+  #print-canvas-area, #print-canvas-area * {
+    visibility: visible !important;
+  }
+  #print-canvas-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 20mm !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    font-family: "Shippori Mincho", "Hiragino Mincho ProN", "MS Mincho", serif !important;
+    font-size: 11pt !important;
+    line-height: 2.3 !important;
+  }
+  #print-canvas-area p {
+    text-indent: 1em;
+    margin-bottom: 0px;
+  }
+}

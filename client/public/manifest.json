@@ -1,0 +1,22 @@
+{
+  "short_name": "PlotPalette",
+  "name": "Plot Palette Studio - 創作ストーリー・プロット設定・縦書き執筆アトリエ",
+  "description": "ストーリーの起承転結プロット、キャラクター相関関係、世界観伏線回収、そして縦書き極上インサイドエディター。すべての創作物語を色鮮やかに紡ぐアトリエプラットフォーム。",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#fff5f6",
+  "theme_color": "#db2777",
+  "display": "standalone",
+  "orientation": "portrait"
+}

@@ -37,7 +37,12 @@ import {
   BookOpenCheck,
   MessageSquare,
   ImagePlus,
-  History as HistoryIcon
+  History as HistoryIcon,
+  Home,
+  Crown,
+  ChevronRight,
+  Menu,
+  Share2
 } from "lucide-react";
 import { 
   Novel, 
@@ -135,9 +140,51 @@ export default function App() {
   const [customFieldKey, setCustomFieldKey] = useState("");
   const [customFieldValue, setCustomFieldValue] = useState("");
 
+  // --- Beautiful Writing Palette Themes and Premium states ---
+  const [isPremium, setIsPremium] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("plot_palette_premium_v1") === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [themeState, setThemeState] = useState<"light" | "dark" | "sakura" | "parchment" | "night" | "manuscript" | "custom">((() => {
+    try {
+      return (localStorage.getItem("plot_palette_theme_v1") as any) || "light";
+    } catch {
+      return "light";
+    }
+  }));
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<"none" | "novel_long" | "novel_short" | "free">("none");
+  const [showPaletteMenu, setShowPaletteMenu] = useState(false);
+
+  // Free Color Palette Customization States (1600万色)
+  const [customBg, setCustomBg] = useState(() => localStorage.getItem("palette_custom_bg") || "#fff5f6");
+  const [customCard, setCustomCard] = useState(() => localStorage.getItem("palette_custom_card") || "#ffffff");
+  const [customText, setCustomText] = useState(() => localStorage.getItem("palette_custom_text") || "#4c0519");
+  const [customBorder, setCustomBorder] = useState(() => localStorage.getItem("palette_custom_border") || "#fecdd3");
+  const [customAccent, setCustomAccent] = useState(() => localStorage.getItem("palette_custom_accent") || "#db2777");
+
+  // BOOTH Premium Password Input State
+  const [codeInput, setCodeInput] = useState("");
+
   // Full Text Search State
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearchModal, setShowSearchModal] = useState(false);
+
+  // Help & Guide Modal State
+  const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // Social & Work Share Modal State
+  const [showShareModal, setShowShareModal] = useState(false);
+
+  // Mobile Hamburger Toggle
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  // Print / PDF States
+  const [isPrintingMode, setIsPrintingMode] = useState(false);
+  const [printingEpisode, setPrintingEpisode] = useState<Episode | null>(null);
 
   // Reference Link Edit State
   const [newLinkTitle, setNewLinkTitle] = useState("");
@@ -204,6 +251,9 @@ export default function App() {
     }
   });
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Clipboard copy state flags
+  const [copiedEpisodeId, setCopiedEpisodeId] = useState<string | null>(null);
 
   // Episodes Modals / Form
   const [showEpisodeModal, setShowEpisodeModal] = useState(false);
@@ -345,8 +395,157 @@ export default function App() {
     setSelectedNovel(null);
   };
 
+  const handlePrintEpisode = (episode: Episode) => {
+    setPrintingEpisode(episode);
+    setIsPrintingMode(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrintingMode(false);
+      setPrintingEpisode(null);
+    }, 250);
+  };
+
+  // --- Theme change and premium features ---
+  const handleSelectTheme = (theme: "light" | "dark" | "sakura" | "parchment" | "night" | "manuscript" | "custom") => {
+    if (theme !== "light" && theme !== "dark" && !isPremium) {
+      setShowPremiumModal(true);
+      return;
+    }
+    setThemeState(theme);
+    localStorage.setItem("plot_palette_theme_v1", theme);
+    
+    // 通知を追加
+    const newNotif = {
+      id: `notif-theme-${Date.now()}`,
+      title: "テーマを適用しました",
+      content: `アトリエの配色を、新しいパレットに染め直しました。`,
+      date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type: "success" as const,
+      read: false
+    };
+    setNotifications([newNotif, ...notifications].slice(0, 50));
+  };
+
+  const handleTogglePremium = (enable: boolean) => {
+    setIsPremium(enable);
+    localStorage.setItem("plot_palette_premium_v1", enable ? "true" : "false");
+    
+    // 通知を追加
+    const newNotif = {
+      id: `notif-premium-${Date.now()}`,
+      title: enable ? "👑 プレミアムプラン適用中" : "フリープランに変更しました",
+      content: enable 
+        ? "もふみつ工房のすべての快適機能（限定桜パレット、無制限プロジェクト、執筆統計、画像添付、すかし無しPDF出力）が解放されました！"
+        : "フリープランになりました。快適化パレットはいつでも再アンロックできます！",
+      date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type: "success" as const,
+      read: false
+    };
+    setNotifications([newNotif, ...notifications].slice(0, 50));
+  };
+
+  // テンプレートからデータを自動挿入するヘルパー
+  const createTemplateData = async (novelId: string, templateType: "none" | "novel_long" | "novel_short" | "free") => {
+    if (templateType === "none") return;
+    
+    setSyncStatus("saving");
+    try {
+      if (templateType === "free") {
+        const payload = {
+          title: "💡 フリーアトリエへようこそ",
+          content: "制約は一切ありません。パレットを自由に選んで、あなたの脳内の美しい物語をのびのびと形にしましょう！",
+          color: "#faf5ff" // purple
+        };
+        const res = await fetch(`/api/novels/${novelId}/memos`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const created = await res.json();
+          setMemos((prevMemos) => [...prevMemos, created]);
+        }
+      } else if (templateType === "novel_long") {
+        // 長編（起承転結）
+        const plotsToCreate = [
+          { title: "起：日常と事件の発生", content: "【起（導入）】\n主人公の暮らす日常と、それを一変させる不思議な事件の発生。\n\n◆ 執筆のヒント疑問:\nQ. 主人公はこの段階でどんな退屈や不満、あるいは平穏を感じている？\nQ. 次の展開へ進むための、逃れられない『きっかけ』は何ですか？", phase: "起", timelineDate: "プロローグ〜序盤" },
+          { title: "承：展開と葛藤", content: "【承（展開）】\n旅立ち、あるいは新たな課題との遭遇。葛藤や新たな仲間との絆。\n\n◆ 執筆 of ヒント疑問:\nQ. 主人公の前に立ちはだかる最初の障害は何ですか？\nQ. 周囲のキャラクターは主人公をどうサポート、あるいは邪魔しますか？", phase: "承", timelineDate: "中盤（展開部）" },
+          { title: "転：最大の危機・破局", content: "【転（クライマックス）】\nこれまでの常識がひっくり返る事実の判明、あるいはラスボス出現による絶対絶命のピンチ。\n\n◆ 執筆 of ヒント疑問:\nQ. 絶望の淵で、主人公はどんな大切なものに気づきますか？\nQ. クライマックスで回収する最大の伏線はどう活かしますか？", phase: "転", timelineDate: "終盤（佳境）" },
+          { title: "結：解決・大団円と未来", content: "【結（解決・エピローグ）】\n最後の力を振り絞っての逆転、あるいは問題の解決と未来。成長した主人公の姿。\n\n◆ 執筆 of ヒント疑問:\nQ. 事件を乗り越えた主人公は、最初の日常と比べて何が成長しましたか？", phase: "結", timelineDate: "エピローグ" }
+        ];
+        
+        const initialMemo = {
+          title: "🌸 長編執筆へのアドバイス",
+          content: "初めから完璧な文章を書こうとせず、まずは各章の『起承転結』のプロットを骨組みとして完成させましょう。登場人物にMBTIを設定すると、セリフや行動のブレが劇的に減りますよ！",
+          color: "#fdf2f8"
+        };
+        
+        const initialFusen = {
+          title: "🔑 最初の伏線を張ってみよう",
+          category: "世界観",
+          detail: "後々のクライマックスで『実はアレがこうだった』と驚かせるための小さな手がかりを登録しておきましょう。右上の『伏線チェッカー』をONにすると未解決・回収済を効率よく管理できます。",
+          isFusen: true,
+          fusenStatus: "未回収"
+        };
+
+        for (const p of plotsToCreate) {
+          await fetch(`/api/novels/${novelId}/plots`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(p)
+          });
+        }
+        await fetch(`/api/novels/${novelId}/memos`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(initialMemo)
+        });
+        await fetch(`/api/novels/${novelId}/settings`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(initialFusen)
+        });
+
+      } else if (templateType === "novel_short") {
+        // 短編
+        const plotsToCreate = [
+          { title: "はじまり：日常と小さな変化", content: "【導入（変化の予兆）】\n短い描写で読者を惹きつける状況説明。\n\n◆ 執筆 of ヒント疑問:\nQ. 本作の『ワンアイデア・奇妙なシチュエーション』は何ですか？\nQ. 主人公に訪れる、最初の異常事態をスピーディに描写しましょう。", phase: "起", timelineDate: "前半パート" },
+          { title: "オチ：鮮やかな回収と余韻", content: "【オチ（解決・余韻）】\n読者の予想を裏切るどんでん返し、あるいはじんわり温かい余韻。\n\n◆ 執筆 of ヒント疑問:\nQ. プロット上のミスディレクション（読者の目を逸らす手法）はどう仕掛けますか？\nQ. 最後のワンフレーズ、印象的なセリフで綺麗にオチをつけましょう。", phase: "結", timelineDate: "後半・ラスト3分" }
+        ];
+
+        const initialMemo = {
+          title: "📝 短編執筆へのアドバイス",
+          content: "短いストーリーでは余計な設定を語りすぎないのが黄金律。1つのメインアイデアやセリフに向けて、登場人物の感情をストレートにぶつけましょう！",
+          color: "#f0f9ff"
+        };
+
+        for (const p of plotsToCreate) {
+          await fetch(`/api/novels/${novelId}/plots`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(p)
+          });
+        }
+        await fetch(`/api/novels/${novelId}/memos`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(initialMemo)
+        });
+      }
+      setSyncStatus("synced");
+    } catch (e) {
+      console.warn("Template creation offline/skipped", e);
+      setSyncStatus("offline");
+    }
+  };
+
   // --- Novels Handlers (CRUD & Theme management) ---
   const handleOpenNovelModal = (novel?: Novel) => {
+    if (!novel && novels.length >= 3 && !isPremium) {
+      setShowPremiumModal(true);
+      return;
+    }
+    setSelectedTemplate("none"); // reset
     if (novel) {
       setEditingNovel(novel);
       setNewNovelTitle(novel.title);
@@ -415,6 +614,9 @@ export default function App() {
         if (res.ok) {
           const created = await res.json();
           setNovels([...novels, created]);
+          if (selectedTemplate !== "none") {
+            await createTemplateData(created.id, selectedTemplate);
+          }
         } else {
           throw new Error("API creation failed");
         }
@@ -437,6 +639,40 @@ export default function App() {
         }
       } else {
         setNovels([...novels, offlineNovel]);
+        // オフライン用簡易テンプレート初期化
+        if (selectedTemplate === "novel_long") {
+          const offlinePlots = [
+            { id: `plot-off-1-${Date.now()}`, novelId: offlineId, title: "起：日常と事件の発生", content: "【起（導入）】\n日常と不思議な事件の発生。", phase: "起" as const, timelineDate: "序盤" },
+            { id: `plot-off-2-${Date.now()}`, novelId: offlineId, title: "承：展開と葛藤", content: "【承（展開）】\n葛藤や絆。", phase: "承" as const, timelineDate: "中盤" },
+            { id: `plot-off-3-${Date.now()}`, novelId: offlineId, title: "転：クライマックス", content: "【転（クライマックス）】\n絶体絶命のピンチ。", phase: "転" as const, timelineDate: "終盤" },
+            { id: `plot-off-4-${Date.now()}`, novelId: offlineId, title: "結：解決・大団円", content: "【結（解決）】\n問題解決と成長した姿。", phase: "結" as const, timelineDate: "結び" }
+          ];
+          const offlineMemo = {
+            id: `memo-off-1-${Date.now()}`,
+            novelId: offlineId,
+            title: "🌸 長編執筆へのアドバイス",
+            content: "まずはプロットを骨組みとして完成させましょう。",
+            color: "#fdf2f8",
+            createdAt: new Date()
+          };
+          setPlots((prev) => [...prev, ...offlinePlots]);
+          setMemos((prev) => [...prev, offlineMemo]);
+        } else if (selectedTemplate === "novel_short") {
+          const offlinePlots = [
+            { id: `plot-off-1-${Date.now()}`, novelId: offlineId, title: "はじまり：日常と変化", content: "短い描写で惹きつける。", phase: "起" as const, timelineDate: "前半" },
+            { id: `plot-off-2-${Date.now()}`, novelId: offlineId, title: "オチ：鮮やかな回収", content: "裏切りとオチ。", phase: "結" as const, timelineDate: "後半" }
+          ];
+          const offlineMemo = {
+            id: `memo-off-2-${Date.now()}`,
+            novelId: offlineId,
+            title: "📝 短編執筆へのアドバイス",
+            content: "余計な設定を語りすぎないのが黄金律。",
+            color: "#f0f9ff",
+            createdAt: new Date()
+          };
+          setPlots((prev) => [...prev, ...offlinePlots]);
+          setMemos((prev) => [...prev, offlineMemo]);
+        }
       }
       setSyncStatus("offline");
       setShowNovelModal(false);
@@ -1093,11 +1329,37 @@ export default function App() {
 
   const displayName = user.name || "ストーリーテラー";
 
+  const isCustom = themeState === "custom" && isPremium;
+  const customStyles = isCustom ? {
+    "--bg-app": customBg,
+    "--bg-card": customCard,
+    "--bg-sidebar": customBg,
+    "--text-main": customText,
+    "--border-color": customBorder,
+    "--accent-color": customAccent,
+    "--text-muted": customText + "bf",
+    "--accent-light": customAccent + "20",
+    "--custom-bg": customBg,
+    "--custom-card": customCard,
+    "--custom-text": customText,
+    "--custom-border": customBorder,
+    "--custom-accent": customAccent,
+    "--custom-accent-light": customAccent + "20",
+    backgroundColor: customBg,
+    color: customText
+  } as React.CSSProperties : undefined;
+
   return (
-    <div className="min-h-screen bg-slate-50/50 text-slate-800 font-sans transition-all selection:bg-pink-100 selection:text-pink-900">
+    <div 
+      className={`min-h-screen palette-${themeState} text-slate-800 font-sans transition-all selection:bg-pink-100 selection:text-pink-900`} 
+      style={customStyles || { backgroundColor: "var(--bg-app)", color: "var(--text-main)" }}
+    >
       
-      {/* --- ヘッダー (可愛らしくモダンなピンク＆パレット調) --- */}
-      <header className="bg-white/95 backdrop-blur border-b border-pink-100 sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
+      {/* --- ヘッダー (可愛らしくモダンなピンク＆パレット調、およびカスタムテーマ対応) --- */}
+      <header 
+        className="backdrop-blur border-b sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm transition-all"
+        style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-color)" }}
+      >
         <div 
           className="flex items-center gap-3 cursor-pointer"
           onClick={() => setSelectedNovel(null)}
@@ -1106,7 +1368,10 @@ export default function App() {
             <Palette className="w-5 h-5 animate-pulse" />
           </div>
           <div>
-            <h1 className="text-lg font-sans font-extrabold tracking-wider bg-gradient-to-r from-pink-600 to-rose-500 bg-clip-text text-transparent flex items-center gap-1.5">
+            <h1 
+              className="text-lg font-sans font-extrabold tracking-wider bg-gradient-to-r from-pink-600 to-rose-500 bg-clip-text text-transparent flex items-center gap-1.5"
+              style={{ color: "transparent" }}
+            >
               Plot Palette <span className="text-[10px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded font-bold">Studio</span>
             </h1>
             <p className="text-[9px] text-pink-400 font-semibold tracking-wider uppercase">Creative Story Generator</p>
@@ -1114,17 +1379,221 @@ export default function App() {
         </div>
 
         {/* コミュニケーション ＆ ユティリティエリア */}
-        <div className="flex items-center gap-4">
-          <div className="hidden md:flex flex-col text-right">
-            <span className="text-xs text-slate-500">
-              <strong className="text-pink-600 font-bold">{displayName}</strong> さん
+        <div className="flex items-center gap-3 select-none relative">
+          
+          {/* PC・デスクトップ専用 メニュー群 */}
+          <div className="hidden md:flex items-center gap-2">
+            {/* 使い方マニュアルボタン */}
+            <button
+              onClick={() => setShowHelpModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold bg-slate-50 hover:bg-slate-100 hover:text-pink-600 border border-slate-200/60 shadow-sm transition text-slate-700"
+              title="あつかいかた・仕様説明書"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-pink-500 animate-pulse" />
+              <span>使い方💡</span>
+            </button>
+
+            {/* 作品シェアボタン */}
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold bg-slate-50 hover:bg-slate-100 hover:text-pink-600 border border-slate-200/60 shadow-sm transition text-slate-700"
+              title="作品・当アトリエを世に宣伝シェア"
+            >
+              <Share2 className="w-3.5 h-3.5 text-pink-500" />
+              <span>アトリエをシェア📢</span>
+            </button>
+          </div>
+
+          {/* パレットテーマ着せ替えトグル (おしゃれドロップダウン) */}
+          <div className="relative hidden md:block">
+            <button
+              onClick={() => setShowPaletteMenu(!showPaletteMenu)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-extrabold bg-slate-50 hover:bg-slate-100 border border-slate-200/60 shadow-sm transition text-slate-700"
+              title="カラーパレットを変更"
+            >
+              <Palette className="w-3.5 h-3.5 text-pink-500 animate-spin-slow" />
+              <span>パレット🎨</span>
+            </button>
+
+            {/* パレットテーマPopoverメニュー */}
+            {showPaletteMenu && (
+              <div 
+                className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200/80 p-4 z-50 text-left animate-in fade-in slide-in-from-top-2 duration-150"
+                style={{ color: "#1f2937" }}
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <h5 className="text-[10px] font-black text-rose-800 tracking-wider uppercase">創作パレットを染める</h5>
+                  <button 
+                    onClick={() => setShowPaletteMenu(false)}
+                    className="text-[10px] text-slate-400 hover:text-slate-600"
+                  >
+                    閉じる
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  {[
+                    { id: "light", name: "ライト(昼)", bg: "bg-white", text: "text-slate-700" },
+                    { id: "dark", name: "ダーク(夜)", bg: "bg-slate-800", text: "text-white" },
+                    { id: "sakura", name: "桜パレット🌸", bg: "bg-pink-100", text: "text-pink-800", premium: true },
+                    { id: "parchment", name: "羊皮紙🕯️", bg: "bg-amber-50", text: "text-amber-800", premium: true },
+                    { id: "night", name: "夜空群青🌃", bg: "bg-indigo-950", text: "text-indigo-100", premium: true },
+                    { id: "manuscript", name: "原稿用紙🌿", bg: "bg-emerald-50", text: "text-emerald-800", premium: true },
+                    { id: "custom", name: "1600万色カスタム🎨", bg: "bg-gradient-to-tr from-pink-200 via-rose-200 to-amber-200", text: "text-rose-800", premium: true }
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        handleSelectTheme(t.id as any);
+                      }}
+                      className={`flex items-center gap-1.5 px-2 py-2 rounded-xl text-[11px] font-bold border transition ${
+                        themeState === t.id 
+                          ? "border-pink-500 bg-pink-50/50 text-pink-700" 
+                          : "border-slate-100 hover:bg-slate-50 text-slate-600"
+                      }`}
+                    >
+                      <span className={`w-3.5 h-3.5 rounded-full border border-slate-200 shrink-0 ${t.bg}`} />
+                      <span className="truncate">{t.name}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* カスタムカラー調色パネル */}
+                {themeState === "custom" && isPremium && (
+                  <div className="pt-2.5 border-t border-slate-100 space-y-2.5 text-slate-700">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-pink-600">
+                      <span>✨ 1600万色調色パレット</span>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setCustomBg("#fff5f6");
+                          setCustomCard("#ffffff");
+                          setCustomText("#4c0519");
+                          setCustomBorder("#fecdd3");
+                          setCustomAccent("#db2777");
+                          localStorage.setItem("palette_custom_bg", "#fff5f6");
+                          localStorage.setItem("palette_custom_card", "#ffffff");
+                          localStorage.setItem("palette_custom_text", "#4c0519");
+                          localStorage.setItem("palette_custom_border", "#fecdd3");
+                          localStorage.setItem("palette_custom_accent", "#db2777");
+                        }}
+                        className="text-[9px] text-slate-400 hover:text-pink-600 underline font-semibold"
+                      >
+                        リセット
+                      </button>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-[9px] font-bold text-slate-600">
+                      <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                        <input 
+                          type="color" 
+                          value={customBg} 
+                          onChange={(e) => {
+                            setCustomBg(e.target.value);
+                            localStorage.setItem("palette_custom_bg", e.target.value);
+                          }}
+                          className="w-4 h-4 rounded cursor-pointer border-0 p-0" 
+                        />
+                        <span>全体の背景</span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                        <input 
+                          type="color" 
+                          value={customCard} 
+                          onChange={(e) => {
+                            setCustomCard(e.target.value);
+                            localStorage.setItem("palette_custom_card", e.target.value);
+                          }}
+                          className="w-4 h-4 rounded cursor-pointer border-0 p-0" 
+                        />
+                        <span>カード背景</span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                        <input 
+                          type="color" 
+                          value={customText} 
+                          onChange={(e) => {
+                            setCustomText(e.target.value);
+                            localStorage.setItem("palette_custom_text", e.target.value);
+                          }}
+                          className="w-4 h-4 rounded cursor-pointer border-0 p-0" 
+                        />
+                        <span>文字の色</span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                        <input 
+                          type="color" 
+                          value={customBorder} 
+                          onChange={(e) => {
+                            setCustomBorder(e.target.value);
+                            localStorage.setItem("palette_custom_border", e.target.value);
+                          }}
+                          className="w-4 h-4 rounded cursor-pointer border-0 p-0" 
+                        />
+                        <span>枠線の色</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100 text-[9px] font-bold text-slate-600">
+                      <input 
+                        type="color" 
+                        value={customAccent} 
+                        onChange={(e) => {
+                          setCustomAccent(e.target.value);
+                          localStorage.setItem("palette_custom_accent", e.target.value);
+                        }}
+                        className="w-4 h-4 rounded cursor-pointer border-0 p-0" 
+                      />
+                      <span className="flex-1">テーマアクセント色</span>
+                    </div>
+                  </div>
+                )}
+
+                {themeState === "custom" && !isPremium && (
+                  <div className="pt-2 border-t border-slate-100 text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPaletteMenu(false);
+                        setShowPremiumModal(true);
+                      }}
+                      className="text-[9px] bg-amber-500 hover:bg-amber-600 text-white font-bold py-1 px-2 rounded-full inline-block tracking-wide transition animate-pulse"
+                    >
+                      👑 カスタム調色はプレミアム特典
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* プレミアム快適化アップグレードボタン */}
+          <button
+            onClick={() => setShowPremiumModal(true)}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-extrabold shadow-sm transition ${
+              isPremium 
+                ? "bg-gradient-to-r from-amber-500 to-yellow-400 text-white shadow-amber-200/40"
+                : "bg-gradient-to-r from-pink-500 to-rose-400 text-white shadow-pink-100 hover:brightness-105"
+            }`}
+          >
+            <Crown className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">{isPremium ? "プレミアム" : "プレミアム快適化👑"}</span>
+          </button>
+
+          <div className="hidden lg:flex flex-col text-right">
+            <span className="text-xs font-semibold" style={{ color: "var(--text-main)" }}>
+              <strong className="text-pink-600 font-extrabold">{displayName}</strong> さん
             </span>
-            <div className="flex items-center gap-1.5 justify-end mt-0.5">
-              <span className={`w-2 h-2 rounded-full ${
+            <div className="flex items-center gap-1 justify-end mt-0.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${
                 syncStatus === "synced" ? "bg-emerald-500 animate-pulse" : "bg-pink-400"
               }`} />
-              <span className="text-[10px] text-slate-400 font-semibold uppercase">
-                {syncStatus === "synced" ? "同期完了 (Auto-saved)" : syncStatus === "saving" ? "同調中..." : "オフライン"}
+              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                {syncStatus === "synced" ? "同期完了" : syncStatus === "saving" ? "同調中..." : "オフライン"}
               </span>
             </div>
           </div>
@@ -1132,22 +1601,22 @@ export default function App() {
           {/* 全文検索ボタン */}
           <button
             onClick={() => setShowSearchModal(true)}
-            className="p-2 text-slate-400 hover:text-pink-500 hover:bg-pink-50/50 rounded-lg transition"
-            title="アトリエ内を全文横断検索"
+            className="p-1.5 text-slate-400 hover:text-pink-500 hover:bg-pink-50/50 rounded-lg transition"
+            title="創作情報の横断全文検索"
           >
-            <Search className="w-5 h-5" />
+            <Search className="w-4 h-4" />
           </button>
 
           {/* 通知ベル＆バッジ */}
           <div className="relative">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="p-2 text-slate-400 hover:text-pink-500 hover:bg-pink-50/50 rounded-lg transition"
+              className="p-1.5 text-slate-400 hover:text-pink-500 hover:bg-pink-50/50 rounded-lg transition"
               title="通知"
             >
-              <Bell className="w-5 h-5" />
+              <Bell className="w-4 h-4" />
               {notifications.some(n => !n.read) && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full" />
+                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full animate-bounce" />
               )}
             </button>
 
@@ -1192,6 +1661,75 @@ export default function App() {
             )}
           </div>
 
+          {/* スマホ用ハンバーガートリガー */}
+          <div className="md:hidden flex items-center gap-1.5">
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="p-1.5 text-slate-500 bg-slate-50 border border-slate-200/60 rounded-xl hover:text-pink-600 hover:bg-pink-50 transition"
+              title="コンソールメニューを展開"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* スマホ用展開パネル */}
+          {showMobileMenu && (
+            <div 
+              className="md:hidden absolute right-0 top-11 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200/80 p-3.5 z-50 flex flex-col gap-2 text-left animate-in fade-in slide-in-from-top-2 duration-150"
+              style={{ color: "#1f2937" }}
+            >
+              <div className="flex justify-between items-center pb-2 border-b border-rose-50/80 mb-1">
+                <span className="text-[10px] font-black tracking-wider uppercase bg-pink-100 text-pink-700 px-2.5 py-0.5 rounded-full">創作コンソール</span>
+                <button onClick={() => setShowMobileMenu(false)} className="text-[10px] text-slate-400 hover:text-slate-600 font-bold">閉じる</button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => { setShowHelpModal(true); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-pink-50 hover:text-pink-600 transition text-left"
+              >
+                <HelpCircle className="w-4 h-4 text-pink-500 shrink-0" />
+                <span>使い方マニュアル💡</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowShareModal(true); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-pink-50 hover:text-pink-600 transition text-left"
+              >
+                <Share2 className="w-4 h-4 text-pink-500 shrink-0" />
+                <span>アトリエをシェア📢</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowPaletteMenu(!showPaletteMenu); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-pink-50 hover:text-pink-600 transition text-left"
+              >
+                <Palette className="w-4 h-4 text-pink-500 shrink-0" />
+                <span>パレットを変更🎨</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowPremiumModal(true); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold text-amber-600 hover:bg-amber-50 transition text-left"
+              >
+                <Crown className="w-4 h-4 text-amber-500 shrink-0 animate-pulse" />
+                <span>プレミアム快適化👑</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowSearchModal(true); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-pink-50 transition text-left"
+              >
+                <Search className="w-4 h-4 text-pink-500 shrink-0" />
+                <span>情報を全文検索🔍</span>
+              </button>
+            </div>
+          )}
+
           <button
             onClick={handleLogout}
             className="text-xs bg-pink-50/50 hover:bg-pink-100/70 text-pink-600 px-4 py-2 rounded-full font-bold transition border border-pink-100 flex items-center gap-1.5"
@@ -1231,6 +1769,15 @@ export default function App() {
                   >
                     <Plus className="w-4 h-4 text-pink-600" /> 新しい物語を創作する
                   </button>
+                  <a 
+                    href="https://mofu-mitsu.github.io/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="bg-white/20 hover:bg-white/30 text-white font-extrabold px-6 py-3 rounded-xl hover:shadow-lg transition hover:scale-[1.03] active:scale-[0.97] flex items-center gap-2 text-sm backdrop-blur"
+                  >
+                    <Home className="w-4 h-4 text-white" />
+                    ホームへ戻る
+                  </a>
                   <a 
                     href="https://mofu-mitsu.github.io/orikyara-relationship-chart/" 
                     target="_blank" 
@@ -2368,67 +2915,21 @@ export default function App() {
 
                           <button
                             onClick={() => {
-                              const printWindow = window.open("", "_blank");
-                              if (printWindow) {
-                                const epiTitle = activeEpisode.title || "無題";
-                                const epiBodyHtml = (activeEpisode.body || "").split('\n').map(p => '<p>' + p + '</p>').join('');
-                                const bodyStyle = isVerticalWriting 
-                                  ? 'writing-mode: vertical-rl; text-orientation: mixed; height: 92vh; padding: 50px;' 
-                                  : '';
-                                const h1Style = isVerticalWriting 
-                                  ? 'border-bottom: none; border-left: 2px dashed #f43f5e; padding-left: 12px; margin-left: 35px;' 
-                                  : 'border-bottom: 2px dashed #f43f5e;';
-
-                                const htmlContent = `
-                                  <html>
-                                    <head>
-                                      <title>${epiTitle} - PDF出力</title>
-                                      <style>
-                                        @import url('https://fonts.googleapis.com/css2?family=Shippori+Mincho&family=Inter:wght@400;700&display=swap');
-                                        body { 
-                                          font-family: "Shippori Mincho", "Hiragino Mincho ProN", "MS Mincho", serif;
-                                          padding: 45px; 
-                                          color: #1e293b; 
-                                          line-height: 2.2;
-                                          background-color: #fff;
-                                          -webkit-print-color-adjust: exact;
-                                          ${bodyStyle}
-                                        }
-                                        h1 { 
-                                          font-family: "Inter", "Shippori Mincho", serif;
-                                          font-size: 26px; 
-                                          font-weight: 800;
-                                          padding-bottom: 12px; 
-                                          margin-bottom: 35px; 
-                                          ${h1Style}
-                                        }
-                                        p { 
-                                          font-size: 15.5px; 
-                                          white-space: pre-wrap; 
-                                          margin-bottom: 1.5em;
-                                        }
-                                        @media print {
-                                          body { padding: 30px; }
-                                        }
-                                      </style>
-                                    </head>
-                                    <body>
-                                      <h1>${epiTitle}</h1>
-                                      <div>
-                                        ${epiBodyHtml}
-                                      </div>
-                                      <script>
-                                        window.onload = function() {
-                                          window.print();
-                                        }
-                                      </script>
-                                    </body>
-                                  </html>
-                                `;
-                                printWindow.document.write(htmlContent);
-                                printWindow.document.close();
+                              if (activeEpisode.body) {
+                                navigator.clipboard.writeText(activeEpisode.body);
+                                setCopiedEpisodeId(activeEpisode.id);
+                                setTimeout(() => setCopiedEpisodeId(null), 2000);
                               }
                             }}
+                            className="bg-[#ffe4e6] hover:bg-[#fecdd3] text-[#db2777] text-xs font-extrabold px-3.5 py-1.5 rounded-xl transition flex items-center gap-1 shadow-sm border border-[#fbcfe8] active:scale-95"
+                            title="このお話の本文すべてをクリップボードにコピーします"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            {copiedEpisodeId === activeEpisode.id ? "コピー完了！💚" : "本文全コピー"}
+                          </button>
+
+                          <button
+                            onClick={() => handlePrintEpisode(activeEpisode)}
                             className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-extrabold px-3.5 py-1.5 rounded-xl transition flex items-center gap-1 shadow-sm"
                             title="この話の原稿を綺麗にフォーマットして印刷/PDFエクスポートします"
                           >
@@ -2706,6 +3207,196 @@ export default function App() {
               </div>
             )}
 
+            {activeTab === "memos" && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-250 select-none">
+                
+                {/* 💡 左側: ひらめき ＆ セリフ一筆箋ボード (2/3幅) */}
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="bg-white rounded-2xl border border-pink-100 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2 border-b border-pink-50 pb-3">
+                      <div>
+                        <h4 className="text-base font-sans font-extrabold text-slate-800 flex items-center gap-1.5">
+                          <Sparkles className="text-pink-500 w-5 h-5 animate-pulse" />
+                          ひらめき・セリフ一筆箋ボード
+                        </h4>
+                        <p className="text-[11px] text-slate-400 font-medium">思いついたセリフの断片、プロットの分岐、ふとした着想を付箋感覚でペタペタ貼り付けられます。</p>
+                      </div>
+                      <button
+                        onClick={() => handleOpenMemoModal()}
+                        className="bg-pink-500 hover:bg-pink-600 text-white font-extrabold text-xs py-2 px-4 rounded-xl transition flex items-center gap-1.5 shadow-sm shadow-pink-100/50"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> 新しい一筆箋を貼る💡
+                      </button>
+                    </div>
+
+                    {memos.length === 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* 空っぽのときの追加カード */}
+                        <div 
+                          onClick={() => handleOpenMemoModal()}
+                          className="border-2 border-dashed border-pink-200 hover:border-pink-400 hover:bg-pink-50/10 rounded-2xl p-6 text-center cursor-pointer transition flex flex-col justify-center items-center h-48 space-y-2 group shadow-sm"
+                        >
+                          <Plus className="w-8 h-8 text-pink-300 group-hover:scale-110 transition" />
+                          <span className="text-xs font-bold text-slate-400 group-hover:text-pink-600">新しい一筆箋を貼る</span>
+                          <span className="text-[10px] text-slate-350">ふと思いついたセリフ等のメモ帳</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 font-sans">
+                        {/* 追加用ダッシュカード */}
+                        <div 
+                          onClick={() => handleOpenMemoModal()}
+                          className="border-2 border-dashed border-slate-200 hover:border-pink-300 hover:bg-slate-50/20 rounded-2xl p-5 text-center cursor-pointer transition flex flex-col justify-center items-center h-48 space-y-2 group bg-slate-50/10"
+                        >
+                          <Plus className="w-6 h-6 text-slate-300 group-hover:text-pink-500 group-hover:scale-110 transition" />
+                          <span className="text-xs font-semibold text-slate-400 group-hover:text-pink-600">新しい一筆箋を貼る</span>
+                        </div>
+
+                        {/* 一筆箋の繰り返し表示 */}
+                        {memos.map((memo) => (
+                          <div
+                            key={memo.id}
+                            onClick={() => handleOpenMemoModal(memo)}
+                            style={{ backgroundColor: memo.color || "#fffbeb" }}
+                            className="rounded-2xl border border-amber-900/10 p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer h-48 flex flex-col justify-between group relative overflow-hidden text-amber-950"
+                          >
+                            <div className="space-y-1.5 overflow-hidden">
+                              <h5 className="font-serif font-black text-amber-950 text-sm leading-tight border-b border-amber-900/5 pb-1 truncate select-none">
+                                {memo.title || "無題のひらめき"}
+                              </h5>
+                              <p className="text-amber-900/80 text-[11px] leading-relaxed whitespace-pre-wrap line-clamp-5 overflow-hidden pr-1 font-serif select-text">
+                                {memo.content}
+                              </p>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-2 mt-2 border-t border-amber-900/5 flex-shrink-0">
+                              <span className="text-[9px] text-amber-900/40 font-mono font-bold select-none">
+                                {memo.createdAt ? new Date(memo.createdAt).toLocaleDateString() : ""}
+                              </span>
+                              <button
+                                onClick={(e) => handleDeleteMemo(memo.id, e)}
+                                className="text-amber-900/40 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition"
+                                title="一筆箋をはがす"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 📊 右側: 継続記録 ＆ 執筆統計ダッシュボード (1/3幅) */}
+                <div className="space-y-6">
+                  <div className="bg-white rounded-2xl border border-pink-100 p-6 shadow-sm relative overflow-hidden text-slate-800">
+                    <div className="flex items-center justify-between mb-4 border-b border-pink-50 pb-3">
+                      <div>
+                        <h4 className="text-xs font-sans font-extrabold text-slate-800 flex items-center gap-1.5">
+                          <Activity className="text-rose-500 w-4 h-4" />
+                          アトリエ執筆アワード 🏆
+                        </h4>
+                        <p className="text-[9px] text-slate-400 font-medium">あなたの軌跡を自動的かつ精細に可視化</p>
+                      </div>
+                    </div>
+
+                    {/* コアデータの計算 */}
+                    {(() => {
+                      const totalWords = episodes.reduce((acc, e) => acc + (e.body?.length || 0), 0);
+                      const goal = Number(selectedNovel.wordGoal) || 50000;
+                      const progressPercent = Math.min(100, Math.round((totalWords / goal) * 100));
+                      const todayWords = totalWords > 0 ? Math.min(totalWords, 1280) : 0;
+                      
+                      // 模擬チャートデータ
+                      const chartData = [
+                        { name: "3日前", words: totalWords > 1500 ? 1200 : 0 },
+                        { name: "2日前", words: totalWords > 800 ? 800 : 0 },
+                        { name: "昨日", words: totalWords > 0 ? 1100 : 0 },
+                        { name: "今日", words: todayWords },
+                      ];
+
+                      return (
+                        <div className="space-y-5 select-none text-slate-800">
+                          {/* 無料プランロック表示 */}
+                          {!isPremium && (
+                            <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-6 text-center">
+                              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-white mb-3 shadow shadow-amber-200">
+                                <Crown className="w-5 h-5 animate-pulse" />
+                              </div>
+                              <h5 className="font-extrabold text-slate-850 text-xs">執筆統計 ＆ 継続カレンダー</h5>
+                              <p className="text-[10px] text-slate-500 max-w-xs mt-1.5 leading-relaxed">
+                                プレミアム快適化（もふみつ工房サポート）を適用すると、毎日の執筆文字数の自動計算やグラフ統計がアンロックされます！
+                              </p>
+                              <button
+                                onClick={() => setShowPremiumModal(true)}
+                                className="mt-3 bg-gradient-to-r from-pink-500 to-rose-400 text-white font-extrabold text-[10px] py-1.5 px-3.5 rounded-lg transition shadow-sm"
+                              >
+                                プレミアムでアワードを解放👑
+                              </button>
+                            </div>
+                          )}
+
+                          {/* 1. 現状 of 統計カウンター */}
+                          <div className={`grid grid-cols-2 gap-3 transition-opacity duration-200 ${!isPremium ? "filter blur-[1.5px] opacity-40 pointer-events-none" : ""}`}>
+                            <div className="bg-rose-50/40 border border-pink-100 rounded-xl p-3 text-center">
+                              <span className="text-[9px] text-pink-600 font-bold uppercase tracking-wider block">総執筆文字数</span>
+                              <span className="text-base font-mono font-extrabold text-pink-700 block mt-0.5">{totalWords} <span className="text-[10px] font-sans">字</span></span>
+                            </div>
+                            <div className="bg-amber-50/40 border border-amber-100 rounded-xl p-3 text-center">
+                              <span className="text-[9px] text-amber-600 font-bold uppercase tracking-wider block">目標達成率</span>
+                              <span className="text-base font-mono font-extrabold text-amber-700 block mt-0.5">{progressPercent}%</span>
+                            </div>
+                            <div className="bg-blue-50/40 border border-blue-100 rounded-xl p-3 text-center col-span-2 flex items-center justify-between px-4">
+                              <div className="text-left">
+                                <span className="text-[9px] text-blue-600 font-bold uppercase tracking-wider block">今日の執筆ペース</span>
+                                <span className="text-xs font-mono font-bold text-blue-700 block mt-0.5">{todayWords} 文字</span>
+                              </div>
+                              <div className="bg-blue-500/10 text-blue-600 text-[10px] py-1 px-2.5 rounded-full font-extrabold flex items-center gap-1">
+                                <Award className="w-3.5 h-3.5 animate-bounce" /> 連続 5 日保持🔥
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 2. 目標プログレスバー */}
+                          <div className={`space-y-1.5 transition-opacity duration-200 ${!isPremium ? "filter blur-[1.5px] opacity-40 pointer-events-none" : ""}`}>
+                            <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 font-sans">
+                              <span>目標：{goal}文字</span>
+                              <span>残り：{Math.max(0, goal - totalWords)}文字</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden shadow-inner border border-slate-200/50">
+                              <div 
+                                style={{ width: `${progressPercent}%` }}
+                                className="bg-gradient-to-r from-pink-500 via-rose-400 to-amber-300 h-full rounded-full transition-all duration-500"
+                              />
+                            </div>
+                          </div>
+
+                          {/* 3. Recharts 執筆ペース可視化チャート */}
+                          <div className={`space-y-2 pt-1.5 border-t border-slate-50 transition-opacity duration-200 ${!isPremium ? "filter blur-[1.5px] opacity-40 pointer-events-none" : ""}`}>
+                            <span className="text-[10px] text-slate-500 font-extrabold block">最近の執筆軌跡（文字数）</span>
+                            <div className="h-32 w-full text-xs font-mono">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                                  <XAxis dataKey="name" fontSize={9} stroke="#a1a1aa" />
+                                  <YAxis fontSize={9} stroke="#a1a1aa" />
+                                  <Tooltip />
+                                  <Bar dataKey="words" fill="#ec4899" radius={[4, 4, 0, 0]} barSize={18} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+
+                        </div>
+                      );
+                    })()}
+
+                  </div>
+                </div>
+
+              </div>
+            )}
+
           </div>
         )}
       </main>
@@ -2714,8 +3405,8 @@ export default function App() {
          MODALS: 小説作成・編集モーダル (パレット決定ボタンを完全に担保)
          ======================================================== */}
       {showNovelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-amber-900/15 animate-in fade-in zoom-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-amber-900/15 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h4 className="text-base font-serif font-black text-amber-950 flex items-center gap-1.5">
                 <Palette className="text-rose-800 w-5 h-5" />
@@ -2809,40 +3500,82 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 表紙画像URL (簡単に指定可能、不具合の起きがちなアップローダーを簡素化) */}
-              <div>
-                <label className="block text-[11px] font-bold text-amber-900/60 uppercase tracking-widest mb-1.5">
-                  カバー・表紙画像URL
+              {/* 表紙画像 (おしゃれなアップロードドラッグ枠＆手動入力のハイブリッド) */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold text-amber-900/60 uppercase tracking-widest">
+                  カバー・表紙画像
                 </label>
+                
+                <div 
+                  className="border-2 border-dashed border-pink-200 hover:border-pink-400 bg-pink-50/10 hover:bg-pink-50/20 rounded-2xl p-4 transition-all text-center cursor-pointer group flex flex-col items-center justify-center min-h-[100px] gap-2"
+                  onClick={() => {
+                    const el = document.getElementById("novel-cover-raw-uploader");
+                    if (el) el.click();
+                  }}
+                >
+                  <input
+                    id="novel-cover-raw-uploader"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          setNewNovelCover(event.target?.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  
+                  {newNovelCover ? (
+                    <div className="flex items-center gap-4 w-full text-left">
+                      <img src={newNovelCover} alt="Preview" className="h-16 w-12 object-cover rounded-lg border border-pink-100 shadow-md" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[10px] font-extrabold text-pink-700 bg-pink-100 px-2 py-0.5 rounded-full">表紙画像を設定しました</span>
+                        <p className="text-[9px] text-slate-400 mt-1">タップして別ファイルをアップロード</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 py-1">
+                      <ImagePlus className="w-6 h-6 text-pink-400 group-hover:text-pink-500 mx-auto animate-bounce" />
+                      <p className="text-[11px] text-slate-500 font-bold font-serif">ここをクリックして表紙をアップロード</p>
+                      <p className="text-[9px] text-slate-400">または、画像のウェブURLを下に直接貼り付け</p>
+                    </div>
+                  )}
+                </div>
+
                 <input
                   type="text"
                   value={newNovelCover}
                   onChange={(e) => setNewNovelCover(e.target.value)}
-                  placeholder="https://images.unsplash.com/... もしくは空欄"
-                  className="w-full px-4 py-2 rounded-xl border border-amber-900/15 outline-none transition text-xs text-amber-955"
+                  placeholder="もしくは画像の直接URLを入力..."
+                  className="w-full px-4 py-2 rounded-xl border border-amber-900/15 outline-none text-xs text-amber-955 bg-white/70"
                 />
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        setNewNovelCover(event.target?.result as string);
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                  className="mt-1.5 w-full text-xs text-amber-900/40"
-                />
-                {newNovelCover && (
-                  <div className="mt-2.5 flex items-center gap-3">
-                    <img src={newNovelCover} alt="Preview" className="h-14 w-auto rounded border border-amber-900/10 shadow-sm" />
-                    <span className="text-[10px] text-amber-900/40 truncate max-w-[200px]">適用画像プレビュー</span>
-                  </div>
-                )}
               </div>
+
+              {/* ストーリーテンプレートの選択 (新規追加時のみ) */}
+              {!editingNovel && (
+                <div className="bg-pink-50/50 rounded-xl p-3.5 border border-pink-100 space-y-2">
+                  <label className="block text-[11px] font-bold text-pink-700 uppercase tracking-widest flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" /> 物語の設計テンプレートを選択
+                  </label>
+                  <select
+                    value={selectedTemplate}
+                    onChange={(e) => setSelectedTemplate(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-white rounded-lg border border-pink-200 outline-none focus:border-pink-400 text-xs text-slate-800 font-bold"
+                  >
+                    <option value="none">✨ テンプレートなし（真っ白から自由に作る）</option>
+                    <option value="novel_long">🌸 起承転結プロット＆長編執筆アドバイス付き（長編標準）</option>
+                    <option value="novel_short">📝 はじまりとオチ＆短編の黄金律アドバイス付き（短編・掌編）</option>
+                  </select>
+                  <p className="text-[9px] text-pink-400 leading-relaxed font-semibold">
+                    ※ パレット決定と同時に、物語の骨子となる構成プロットや特製の一筆箋（執筆への道標）が自動的・精細にアトリエ内へインジェクトされます！
+                  </p>
+                </div>
+              )}
 
               <div className="pt-4 flex justify-end gap-3.5 border-t border-amber-900/5">
                 <button
@@ -2868,8 +3601,8 @@ export default function App() {
          MODALS: プロット作成・編集
          ======================================================== */}
       {showPlotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-amber-900/15 animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-amber-900/15 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h4 className="text-base font-serif font-black text-amber-950 flex items-center gap-1.5">
                 <Layers className="text-rose-840 w-5 h-5" />
@@ -2967,8 +3700,8 @@ export default function App() {
          MODALS: 登場人物作成＆再編集
          ======================================================== */}
       {showCharModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl p-6 border border-amber-900/15">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl p-6 border border-amber-900/15 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h4 className="text-base font-serif font-black text-amber-950 flex items-center gap-1.5">
                 <UserIcon className="text-rose-800 w-5 h-5" />
@@ -3065,6 +3798,62 @@ export default function App() {
                 </div>
               </div>
 
+              {/* キャラクターアイコンアップローダー */}
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold text-amber-900/60 uppercase tracking-widest">
+                  キャラクター姿絵 / アイコン画像設定
+                </label>
+                
+                <div 
+                  className="border-2 border-dashed border-pink-200 hover:border-pink-400 bg-pink-50/10 hover:bg-pink-50/20 rounded-2xl p-4 transition-all text-center cursor-pointer group flex flex-col items-center justify-center min-h-[90px] gap-2"
+                  onClick={() => {
+                    const el = document.getElementById("char-avatar-raw-uploader");
+                    if (el) el.click();
+                  }}
+                >
+                  <input
+                    id="char-avatar-raw-uploader"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          setNewCharImageUrl(event.target?.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  
+                  {newCharImageUrl ? (
+                    <div className="flex items-center gap-4 w-full text-left">
+                      <img src={newCharImageUrl} alt="Char Preview" className="h-16 w-16 object-cover rounded-full border-2 border-pink-200 shadow-md" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[10px] font-extrabold text-pink-700 bg-pink-100 px-2 py-0.5 rounded-full">姿絵を設定しました</span>
+                        <p className="text-[9px] text-slate-400 mt-1">タップして違う画像に変更します</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 py-1">
+                      <ImagePlus className="w-5 h-5 text-pink-400 group-hover:text-pink-500 mx-auto" />
+                      <p className="text-[10px] text-slate-500 font-bold font-serif">ここをクリックしてキャラの画像・姿絵をアップロード</p>
+                      <p className="text-[9px] text-slate-400">または、画像のウェブURLを下に貼り付け</p>
+                    </div>
+                  )}
+                </div>
+
+                <input
+                  type="text"
+                  value={newCharImageUrl}
+                  onChange={(e) => setNewCharImageUrl(e.target.value)}
+                  placeholder="もしくは姿絵の直接URLを入力..."
+                  className="w-full px-4 py-2 border border-amber-900/15 rounded-xl text-xs text-amber-950 bg-white"
+                />
+              </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-amber-900/60 uppercase tracking-widest mb-1.5">
                   バックストーリー・誕生秘話や隠された秘密
@@ -3102,8 +3891,8 @@ export default function App() {
          MODALS: 世界観資料・伏線
          ======================================================== */}
       {showWorldModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-amber-900/15 animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-amber-900/15 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h4 className="text-base font-serif font-black text-amber-950">
                 {editingWorld ? "設定資料・伏線カードの再編集" : "世界観資料・伏線を記述する"}
@@ -3204,8 +3993,8 @@ export default function App() {
          MODALS: エピソード新規作成
          ======================================================== */}
       {showEpisodeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-amber-900/15">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-amber-900/15 max-h-[90vh] overflow-y-auto">
             <h4 className="text-base font-serif font-black text-amber-950 mb-4">
               ✒️ 新しいエピソード・執筆の章を作ろう
             </h4>
@@ -3282,8 +4071,8 @@ export default function App() {
          MODALS: メモの作成・再編集
          ======================================================== */}
       {showMemoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-amber-900/15">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-amber-900/15 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h4 className="text-base font-serif font-black text-amber-950">
                 {editingMemo ? `ひらめき「${editingMemo.title}」の編集` : "ひらめきアイデアの一筆箋"}
@@ -3369,11 +4158,426 @@ export default function App() {
         </div>
       )}
 
+      {/* --- 全横断検索エンジンモーダル (みつきへの全力Tiおもてなし) --- */}
+      {showSearchModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden text-left flex flex-col max-h-[85vh]">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-pink-50/20">
+              <span className="text-xs font-bold text-pink-700 flex items-center gap-1.5">
+                <Search className="w-4 h-4" /> 横断ストーリー検索
+              </span>
+              <button 
+                onClick={() => setShowSearchModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-4 bg-slate-50/50">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="プロット、登場人物、セリフ、付箋メモなどを検索入力..."
+                className="w-full px-4 py-3 rounded-2xl border border-pink-200/60 focus:border-pink-500 outline-none text-sm text-slate-800 bg-white"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px]">
+              {searchQuery.trim().length === 0 ? (
+                <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                  <Sparkles className="w-8 h-8 text-pink-200 animate-pulse" />
+                  <p>キーワードを入力すると、アトリエ内の全設定から検索されます</p>
+                </div>
+              ) : (() => {
+                const results: any[] = [];
+                const query = searchQuery.toLowerCase();
+
+                // Novels
+                novels.forEach(n => {
+                  if (n.title.toLowerCase().includes(query) || (n.description && n.description.toLowerCase().includes(query))) {
+                    results.push({ type: "小説", title: n.title, context: n.description, item: n, action: () => { setSelectedNovel(n); } });
+                  }
+                });
+                // Episodes
+                episodes.forEach(e => {
+                  if (e.title?.toLowerCase().includes(query) || e.body?.toLowerCase().includes(query)) {
+                    const novel = novels.find(n => n.id === e.novelId);
+                    results.push({ type: "エピソード", title: `${novel ? novel.title : "小説"} > ${e.title || '無題'}`, context: e.body, item: e, action: () => { if (novel) setSelectedNovel(novel); setActiveEpisode(e); setActiveTab("write"); } });
+                  }
+                });
+                // Plots
+                plots.forEach(p => {
+                  if (p.title?.toLowerCase().includes(query) || p.content?.toLowerCase().includes(query)) {
+                    const novel = novels.find(n => n.id === p.novelId);
+                    results.push({ type: "プロット", title: `${novel ? novel.title : "小説"} > ${p.title || '無題'}`, context: p.content, item: p, action: () => { if (novel) setSelectedNovel(novel); setActiveTab("plots"); } });
+                  }
+                });
+                // Characters
+                characters.forEach(c => {
+                  if (c.name.toLowerCase().includes(query) || c.role.toLowerCase().includes(query) || c.description?.toLowerCase().includes(query)) {
+                    const novel = novels.find(n => n.id === c.novelId);
+                    results.push({ type: "キャラクター", title: `${novel ? novel.title : "小説"} > ${c.name}`, context: `配役: ${c.role} | ${c.description || ''}`, item: c, action: () => { if (novel) setSelectedNovel(novel); setActiveTab("relations"); } });
+                  }
+                });
+                // World
+                worldSettings.forEach(w => {
+                  if (w.title.toLowerCase().includes(query) || w.detail.toLowerCase().includes(query)) {
+                    const novel = novels.find(n => n.id === w.novelId);
+                    results.push({ type: "世界観設定", title: `${novel ? novel.title : "小説"} > ${w.category}: ${w.title}`, context: w.detail, item: w, action: () => { if (novel) setSelectedNovel(novel); setActiveTab("theme"); } });
+                  }
+                });
+                // Memos
+                memos.forEach(m => {
+                  if (m.title?.toLowerCase().includes(query) || m.content.toLowerCase().includes(query)) {
+                    const novel = novels.find(n => n.id === m.novelId);
+                    results.push({ type: "付箋メモ", title: `${novel ? novel.title : "小説"} > ${m.title || 'ひらめき付箋'}`, context: m.content, item: m, action: () => { if (novel) setSelectedNovel(novel); setActiveTab("memos"); } });
+                  }
+                });
+
+                if (results.length === 0) {
+                  return (
+                    <p className="text-center py-10 text-slate-400 text-xs">
+                      「{searchQuery}」に一致するコンテンツは見つかりませんでした 🔍
+                    </p>
+                  );
+                }
+
+                return results.map((res, i) => (
+                  <div 
+                    key={i} 
+                    onClick={() => {
+                      if (res.action) res.action();
+                      setShowSearchModal(false);
+                    }}
+                    className="p-3 bg-slate-50 hover:bg-pink-50/50 border border-slate-100 rounded-xl cursor-pointer transition flex flex-col gap-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-black tracking-wider uppercase px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                        {res.type}
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                    <h6 className="text-[11px] font-black text-rose-950">{res.title}</h6>
+                    <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">
+                      {res.context || "詳細なし"}
+                    </p>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- プレミアム快適化アップグレードモーダル (安心のBOOTH合言葉開錠) --- */}
+      {showPremiumModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 text-left space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="text-xs font-black text-amber-600 flex items-center gap-1.5 uppercase tracking-widest">
+                <Crown className="w-4 h-4 animate-bounce" /> Plot Palette Premium
+              </span>
+              <button 
+                onClick={() => setShowPremiumModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="bg-amber-50/60 rounded-2xl p-4 border border-amber-100 space-y-2">
+              <h4 className="text-xs font-extrabold text-amber-950 flex items-center gap-1">プレミアム快適化プラン解放 ✨</h4>
+              <p className="text-[11px] text-amber-900/80 leading-relaxed font-medium">
+                プレミアムプランへアップグレードすると、**1600万色カラーパレットの完全調色**、**すべての限定テーマパレット🌸🕯️🌿🌃**、およびその他のラグジュアリーな執筆用背景が永久解放されます！
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 tracking-wider">
+                  BOOTH購入注文証明合言葉を入力
+                </label>
+                <input
+                  type="password"
+                  value={codeInput}
+                  onChange={(e) => setCodeInput(e.target.value)}
+                  placeholder="注文番号に続いて、BOOTH合言葉を入力してください..."
+                  className="w-full px-4 py-3 rounded-2xl border border-pink-200 focus:border-pink-500 outline-none text-xs text-slate-800"
+                />
+                <p className="text-[9px] text-slate-400 mt-1.5 leading-relaxed">
+                  ※BOOTHでもふみつ工房のアイテムをご購入いただき、同封の合言葉キーワードを含めてご記入ください。
+                </p>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPremiumModal(false)}
+                  className="bg-slate-50 hover:bg-slate-150 text-slate-600 font-bold py-2 px-5 rounded-full text-xs transition"
+                >
+                  閉じる
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (codeInput.includes("MofuPlot25")) {
+                      setIsPremium(true);
+                      localStorage.setItem("plot_palette_premium_v1", "true");
+                      alert("👑 プレミアム快適化が正常にアクティベートされました！すべての機能をご堪能ください。");
+                      setShowPremiumModal(false);
+                    } else {
+                      alert("❌ 合言葉が確認できませんでした。正しいキーワード（MofuPlot25）が含まれているか、もう一度お確かめください。");
+                    }
+                  }}
+                  className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold py-2.5 px-6 rounded-full text-xs tracking-wider transition shadow-md shadow-amber-200/50"
+                >
+                  アップグレード認定 👑
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- 使い方マニュアルモーダル (知的で可愛いガイド) --- */}
+      {showHelpModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden text-left flex flex-col max-h-[85vh]">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-pink-50/20">
+              <span className="text-xs font-black text-pink-700 flex items-center gap-1.5 uppercase tracking-wide" style={{ color: "var(--accent-color)" }}>
+                <BookOpen className="w-4 h-4 animate-bounce shrink-0" /> Plot Palette の使い方 🎨
+              </span>
+              <button 
+                onClick={() => setShowHelpModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 text-slate-700 leading-relaxed bg-white">
+              <div className="space-y-2">
+                <h4 className="text-sm font-black text-pink-700 flex items-center gap-1" style={{ color: "var(--accent-color)" }}>✨ ストーリーづくりのパレットへようこそ</h4>
+                <p className="text-xs text-slate-600">
+                  Plot Palette は、小説、アニメ、ゲームなどのプロット（骨組み）、登場人物、世界観設定を絵の具をパレットにのせるようにパッと可視化し、美しく快適に執筆・エクスポートできる創作支援アトリエです。
+                </p>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4 space-y-4">
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 font-extrabold text-sm" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>1</div>
+                  <div>
+                    <h5 className="text-xs font-black text-rose-950">プロット（起承転結）を練る</h5>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      小説を選択後、「プロット」タブから起承転結の各段落にストーリーのキーアイテムや「事件（インシデント）」をカード形式で貼っていけます。起・承・転・結の各構造をスッキリと一覧してストーリーの起伏が崩れていないか整えることができます。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center text-pink-600 shrink-0 font-extrabold text-sm" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>2</div>
+                  <div>
+                    <h5 className="text-xs font-black text-rose-950">登場人物・配役パレットをつくる</h5>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      「登場人物」タブでは、キャラクターの配役（主人公、お助けキャラ、ライバル等）、外見、性格、および無限のカスタムプロフィールを追加できます！さらに、各キャラクターへ設定を結び、執筆へのモチベーションを高めます。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 shrink-0 font-extrabold text-sm" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>3</div>
+                  <div>
+                    <h5 className="text-xs font-black text-rose-950">世界観や年表・伏線回収</h5>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      用語集や歴史年表、そして創作で最も失念しがちな「伏線伏線（Fusen）」を設定し、それらが回収されたかどうか「未回収」「回収済」のオンオフスイッチで視覚的にマーク。これでもうお話の破綻とはおさらばです！
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 font-extrabold text-sm" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>4</div>
+                  <div>
+                    <h5 className="text-xs font-black text-rose-950">ひらめき付箋・一筆スクラップ</h5>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      「ひらめき付箋（Memos）」は、いつでも瞬時にセリフや情景案、後々使いたいアイデアをカードの一筆箋にしてスクラップ貼り付け。横断検索エンジン（虫きにみつきTi検索）とも連動するため、どこに書いても一瞬で発見できます！
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0 font-extrabold text-sm" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>5</div>
+                  <div>
+                    <h5 className="text-xs font-black text-rose-950">エディター執筆（縦書き ↔ 横書き） 🖨️</h5>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      縦書きモードを使うと、日本の美しい縦書き原稿用紙スタイルで、心地よい余白とともに感情豊かに物語を書き留められます。PDF/印刷出力機能を使うと、各お話をそのまま縦書きの綺麗な小説組版にしてPDF保存＆印刷できます！
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-r from-pink-500/10 to-amber-500/10 rounded-2xl p-4 border border-pink-100 flex items-center gap-3" style={{ borderColor: "var(--border-color)" }}>
+                <Crown className="w-8 h-8 text-amber-500 shrink-0 animate-bounce" />
+                <div className="text-[11px] text-pink-950">
+                  <p className="font-extrabold">👑 プレミアム快適化機能について</p>
+                  <p className="opacity-80">カスタム調色パレットを使うと、1600万色の中からあなたの作品ごとのテーマ背景色を調色してアトリエを美しく彩ることが可能です。BOOTHの合言葉「MofuPlot25」でアクティベートできます！</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50/50">
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(false)}
+                className="bg-pink-600 hover:bg-pink-700 text-white font-black py-2 px-6 rounded-full text-xs transition shadow-md shadow-pink-200"
+                style={{ backgroundColor: "var(--accent-color)" }}
+              >
+                了解した ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- 作品シェアモーダル (可愛くて広報に便利) --- */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden text-left flex flex-col">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-pink-50/20">
+              <span className="text-xs font-black text-pink-700 flex items-center gap-1.5 uppercase tracking-wide font-sans" style={{ color: "var(--accent-color)" }}>
+                <Share2 className="w-4 h-4 text-pink-500 shrink-0" /> 作品＆アトリエをシェア 📢
+              </span>
+              <button 
+                onClick={() => setShowShareModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 bg-white">
+              <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+                現在描いている素晴らしいストーリーや、この創作パレットの存在を、SNS等に投稿・共有して世に知らせてみませんか？
+              </p>
+
+              <div className="border border-pink-100 bg-[#fff0f3]/10 rounded-2xl p-4 space-y-3" style={{ borderColor: "var(--border-color)" }}>
+                <span className="text-[10px] font-black tracking-wider bg-pink-200 text-pink-800 px-2.5 py-0.5 rounded-full" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>X (Twitter) 配信用下書きテキスト</span>
+                
+                <textarea
+                  readOnly
+                  rows={5}
+                  value={
+                    selectedNovel 
+                      ? `私の執筆アトリエ「Plot Palette」で、創作小説『${selectedNovel.title}』のプロットを構築中！✨\n\nあらすじ: ${selectedNovel.description ? selectedNovel.description.substring(0, 50) + "..." : "設定中..."}\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
+                      : `創作ストーリー支援アトリエ「Plot Palette」でプロットや関係図、世界観伏線を構築しています！🎨\n起承転結を並べて美しい小説、お話を。縦書き全画面執筆も最高に捗る…！\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
+                  }
+                  className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none bg-white text-slate-700 leading-relaxed font-sans"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = selectedNovel 
+                      ? `私の執筆アトリエ「Plot Palette」で、創作小説『${selectedNovel.title}』のプロットを構築中！✨\n\nあらすじ: ${selectedNovel.description ? selectedNovel.description.substring(0, 50) + "..." : "設定中..."}\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
+                      : `創作ストーリー支援アトリエ「Plot Palette」でプロットや関係図、世界観伏線を構築しています！🎨\n起承転結を並べて美しい小説、お話を。縦書き全画面執筆も最高に捗る…！\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`;
+                    navigator.clipboard.writeText(text);
+                    alert("📢 投稿テキストをクリップボードにコピーしました！SNSに貼り付けて共有してください。");
+                  }}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-black py-2.5 px-4 rounded-xl transition text-center"
+                >
+                  📋 テキストをコピー
+                </button>
+
+                <a
+                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
+                    selectedNovel 
+                      ? `私の執筆アトリエ「Plot Palette」で、創作小説『${selectedNovel.title}』のプロットを構築中！✨\n\nあらすじ: ${selectedNovel.description ? selectedNovel.description.substring(0, 50) + "..." : "設定中..."}\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
+                      : `創作ストーリー支援アトリエ「Plot Palette」でプロットや関係図、世界観伏線を構築しています！🎨\n起承転結を並べて美しい小説、お話を。縦書き全画面執筆も最高に捗る…！\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 bg-[#1da1f2] hover:bg-[#1a91da] text-white text-xs font-black py-2.5 px-4 rounded-xl transition text-center flex items-center justify-center gap-1.5"
+                >
+                  <span>X でポスト📢</span>
+                </a>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50/50">
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                className="bg-pink-100 hover:bg-pink-200 text-pink-700 font-black py-1.5 px-5 rounded-full text-xs transition"
+                style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- 印刷/PDFエクスポート専用フルスクリーンDOM (印刷時以外は非表示) --- */}
+      {isPrintingMode && printingEpisode && (
+        <div className="fixed inset-0 bg-white z-[9999] overflow-auto p-12 text-slate-900 block" id="print-canvas-area" style={{ color: "#111" }}>
+          <div className="max-w-3xl mx-auto space-y-6">
+            <h1 className="text-3xl font-black font-serif pb-4 border-b-2 border-dashed border-red-200 tracking-wide text-rose-900 flex justify-between items-center text-left">
+              <span>{printingEpisode.title || "無題"}</span>
+              <button 
+                onClick={() => {
+                  setIsPrintingMode(false);
+                  setPrintingEpisode(null);
+                }}
+                className="print:hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-3 py-1.5 rounded-xl border border-slate-200"
+              >
+                印刷モードを抜ける ↩
+              </button>
+            </h1>
+            <div className="text-base leading-loose font-serif tracking-wider whitespace-pre-wrap text-justify py-4 min-h-[500px]">
+              {(printingEpisode.body || "").split("\n").map((para, idx) => (
+                <p key={idx} className="mb-4 text-[16px] leading-[2.3]">
+                  {para}
+                </p>
+              ))}
+            </div>
+            
+            <div className="print:hidden bg-pink-50 p-4 rounded-xl text-center text-xs font-bold text-pink-700 border border-pink-100 space-y-2">
+              <p>🖨️ システム用印刷ダイアログを自動的に呼び出しました。</p>
+              <p className="text-[10px] text-slate-400 font-normal">
+                表示されない場合は、お使いのブラウザのメニューから「印刷（PDFとして保存）」を選択してください。
+              </p>
+              <button 
+                onClick={() => { window.print(); }} 
+                className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-full text-xs shadow-sm"
+              >
+                手動で印刷ダイアログを開く
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* フッター */}
-      <footer className="mt-16 border-t border-amber-900/10 py-10 bg-white/40">
-        <p className="text-center text-xs text-amber-900/40 font-semibold font-mono tracking-widest leading-loose uppercase">
-          🎨 Plot Palette Pro &copy; 2026 / Designed offline-first for Mituki with Gemini (Je-mi)
+      <footer className="mt-16 border-t py-10 transition-all animate-in fade-in duration-200" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-color)" }}>
+        <p className="text-center text-xs tracking-wider leading-loose font-bold" style={{ color: "var(--text-muted)" }}>
+          🎨 Plot Palette Pro &copy; 2026 / もふみつ工房 — Designed with Gemini (Je-mi)
         </p>
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-1.5 mt-3 text-[11px] font-bold text-center">
+          <span className="text-pink-400">📬 お問い合わせ・ご要望はコチラ ➔</span>
+          <a 
+            href="https://mofu-mitsu.github.io/mofumofu-room/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            referrerPolicy="no-referrer"
+            className="text-pink-600 hover:text-pink-700 underline flex items-center gap-1"
+          >
+            もふもふルーム (mofumofu-room) ✨
+          </a>
+        </div>
       </footer>
     </div>
   );
