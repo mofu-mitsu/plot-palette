@@ -12,8 +12,8 @@ export default function Login() {
       <div className="w-full max-w-md">
         {/* ロゴ・タイトル */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-pink-500 rounded-full mb-6 shadow-sm border-[3px] border-pink-600">
-            <Palette className="w-10 h-10 text-pink-100" />
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-pink-50 rounded-full mb-6 shadow-sm border-[3px] border-pink-500">
+            <Palette className="w-10 h-10 text-pink-400" />
           </div>
           <h1 className="text-4xl font-bold text-pink-500 mb-2 tracking-tight flex items-center justify-center gap-2">
             Plot Palette

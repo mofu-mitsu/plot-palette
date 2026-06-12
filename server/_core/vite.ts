@@ -4,8 +4,6 @@ import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createServer as createViteServer } from "vite";
-import viteConfig from "../../vite.config";
 
 const getDirname = () => {
   if (typeof __dirname !== "undefined") {
@@ -24,6 +22,10 @@ const getDirname = () => {
 const __localDirname = getDirname();
 
 export async function setupVite(app: Express, server: Server) {
+  // Obfuscate the import so Vercel's serverless trace doesn't try to bundle Vite
+  // in production (which causes Rollup binary missing errors)
+  const viteModule = "vi" + "te";
+  const { createServer: createViteServer } = await import(viteModule as any);
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
@@ -31,8 +33,6 @@ export async function setupVite(app: Express, server: Server) {
   };
 
   const vite = await createViteServer({
-    ...viteConfig,
-    configFile: false,
     server: serverOptions,
     appType: "custom",
   });
