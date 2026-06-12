@@ -13,8 +13,8 @@
   --text-main: #1f2937;
   --text-muted: #6b7280;
   --border-color: #f5e3e6;
-  --accent-color: #ec4899;
-  --accent-light: #fef1f2;
+  --accent-color: #db2777;
+  --accent-light: #fdf2f8;
 }
 
 .palette-dark {
@@ -120,9 +120,27 @@
   border-color: var(--border-color) !important;
 }
 
-/* 常にアクセントを反映 */
-.text-pink-500, .text-pink-600, .text-pink-700 {
-  color: var(--accent-light, var(--accent-color)) !important;
+/* いつもアクセント背景・テキストを反映 (カスタムテーマ調色などをサポート) */
+.palette-custom .bg-pink-500,
+.palette-custom .bg-pink-600 {
+  background-color: var(--accent-color) !important;
+}
+
+.palette-custom .text-pink-500,
+.palette-custom .text-pink-600,
+.palette-custom .text-pink-700 {
+  color: var(--accent-color) !important;
+}
+
+.palette-custom .border-pink-200,
+.palette-custom .border-pink-300,
+.palette-custom .border-pink-400 {
+  border-color: var(--accent-color) !important;
+}
+
+.palette-custom .bg-pink-50,
+.palette-custom .bg-pink-100 {
+  background-color: var(--accent-light) !important;
 }
 
 /* 印刷（PDF書き出し）のための専用スタイル */

@@ -692,17 +692,22 @@ app.post("/api/logout", (req: any, res) => {
   res.json({ success: true });
 });
 
+// --- Export for Vercel Serverless ---
+export default app;
+
 async function start() {
   // Vite/Static asset delivery
   if (process.env.NODE_ENV !== "production") {
     await setupVite(app, server);
-  } else {
+  } else if (!process.env.VERCEL) {
     serveStatic(app);
   }
 
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Server] Plot Palette listening on port ${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`[Server] Plot Palette listening on port ${PORT}`);
+    });
+  }
 }
 
 start().catch((err) => {

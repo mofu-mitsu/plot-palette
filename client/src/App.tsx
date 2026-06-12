@@ -61,6 +61,9 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
+import { Toaster, toast } from "sonner";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -398,11 +401,65 @@ export default function App() {
   const handlePrintEpisode = (episode: Episode) => {
     setPrintingEpisode(episode);
     setIsPrintingMode(true);
-    setTimeout(() => {
-      window.print();
-      setIsPrintingMode(false);
-      setPrintingEpisode(null);
-    }, 250);
+    toast.info("PDFを生成しています。数秒お待ちください...");
+    setTimeout(async () => {
+      const element = document.getElementById("print-canvas-area");
+      if (!element) {
+        setIsPrintingMode(false);
+        setPrintingEpisode(null);
+        return;
+      }
+      try {
+        // html2canvas oklch workaround: Tailwind V4 outputs oklch which html2canvas 1.4.1 doesn't support.
+        // We temporarily wrap getComputedStyle to filter out oklch values to prevent crashes.
+        const originalGetComputedStyle = window.getComputedStyle;
+        window.getComputedStyle = function(el, pseudo) {
+          const style = originalGetComputedStyle(el, pseudo);
+          return new Proxy(style, {
+            get: function(target, prop) {
+              const val = (target as any)[prop];
+              if (typeof val === 'function') {
+                return val.bind(target);
+              }
+              if (typeof val === 'string' && val.includes('oklch')) {
+                if (String(prop).toLowerCase().includes('color')) {
+                    if (String(prop) === 'backgroundColor' || String(prop) === 'background') return 'rgb(255, 255, 255)';
+                    return 'rgb(0, 0, 0)';
+                }
+                return val.replace(/oklch\([^)]+\)/g, 'rgb(0, 0, 0)');
+              }
+              return val;
+            }
+          }) as CSSStyleDeclaration;
+        };
+
+        const canvas = await html2canvas(element, { scale: 2 });
+        
+        // Restore immediately after capture
+        window.getComputedStyle = originalGetComputedStyle;
+
+        const imgData = canvas.toDataURL("image/jpeg", 1.0);
+        const pdf = new jsPDF({
+          orientation: "portrait",
+          unit: "mm",
+          format: "a4"
+        });
+        
+        // A4サイズに合わせて縮尺を調整 (幅を合わせる)
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        
+        pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`${episode.title || "episode"}.pdf`);
+        toast.success("PDFのダウンロードが完了しました！");
+      } catch (err) {
+        console.error(err);
+        toast.error("PDFの生成に失敗しました");
+      } finally {
+        setIsPrintingMode(false);
+        setPrintingEpisode(null);
+      }
+    }, 1000); // Wait for DOM to fully render
   };
 
   // --- Theme change and premium features ---
@@ -1354,7 +1411,7 @@ export default function App() {
       className={`min-h-screen palette-${themeState} text-slate-800 font-sans transition-all selection:bg-pink-100 selection:text-pink-900`} 
       style={customStyles || { backgroundColor: "var(--bg-app)", color: "var(--text-main)" }}
     >
-      
+      <Toaster position="top-center" />
       {/* --- ヘッダー (可愛らしくモダンなピンク＆パレット調、およびカスタムテーマ対応) --- */}
       <header 
         className="backdrop-blur border-b sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm transition-all"
@@ -1372,7 +1429,7 @@ export default function App() {
               className="text-lg font-sans font-extrabold tracking-wider bg-gradient-to-r from-pink-600 to-rose-500 bg-clip-text text-transparent flex items-center gap-1.5"
               style={{ color: "transparent" }}
             >
-              Plot Palette <span className="text-[10px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded font-bold">Studio</span>
+              Plot Palette <span className="text-[10px] bg-pink-500 text-white px-2 py-0.5 rounded-full font-bold shadow-sm">Studio</span>
             </h1>
             <p className="text-[9px] text-pink-400 font-semibold tracking-wider uppercase">Creative Story Generator</p>
           </div>
@@ -1386,20 +1443,20 @@ export default function App() {
             {/* 使い方マニュアルボタン */}
             <button
               onClick={() => setShowHelpModal(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold bg-slate-50 hover:bg-slate-100 hover:text-pink-600 border border-slate-200/60 shadow-sm transition text-slate-700"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white hover:bg-slate-50 border border-slate-200 shadow-sm transition text-slate-700"
               title="あつかいかた・仕様説明書"
             >
-              <HelpCircle className="w-3.5 h-3.5 text-pink-500 animate-pulse" />
+              <HelpCircle className="w-4 h-4 text-slate-500 animate-pulse" />
               <span>使い方💡</span>
             </button>
 
             {/* 作品シェアボタン */}
             <button
               onClick={() => setShowShareModal(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold bg-slate-50 hover:bg-slate-100 hover:text-pink-600 border border-slate-200/60 shadow-sm transition text-slate-700"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white hover:bg-slate-50 border border-slate-200 shadow-sm transition text-slate-700"
               title="作品・当アトリエを世に宣伝シェア"
             >
-              <Share2 className="w-3.5 h-3.5 text-pink-500" />
+              <Share2 className="w-4 h-4 text-slate-500" />
               <span>アトリエをシェア📢</span>
             </button>
           </div>
@@ -1732,7 +1789,7 @@ export default function App() {
 
           <button
             onClick={handleLogout}
-            className="text-xs bg-pink-50/50 hover:bg-pink-100/70 text-pink-600 px-4 py-2 rounded-full font-bold transition border border-pink-100 flex items-center gap-1.5"
+            className="text-xs bg-white hover:bg-slate-50 text-slate-800 px-4 py-2 rounded-full font-bold transition border border-slate-200 shadow-sm flex items-center gap-1.5"
           >
             ログアウト
           </button>
@@ -1896,23 +1953,23 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleExportMarkdown}
-                  className="bg-pink-50 hover:bg-pink-100/80 text-pink-600 text-xs font-extrabold py-2 px-3.5 rounded-xl border border-pink-100 transition flex items-center gap-1.5 shadow-sm"
+                  className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-extrabold py-2 px-3.5 rounded-xl border border-slate-200 transition flex items-center gap-1.5 shadow-sm"
                   title="Markdownとして全情報をエクスポート"
                 >
-                  <FileDown className="w-4 h-4" /> 全情報をMarkdown出力
+                  <FileDown className="w-4 h-4 text-slate-500" /> 全情報をMarkdown出力
                 </button>
                 <button
                   onClick={() => handleOpenNovelModal(selectedNovel)}
-                  className="bg-pink-50 hover:bg-pink-100/80 text-pink-600 text-xs font-extrabold py-2 px-3.5 rounded-xl border border-pink-100 transition flex items-center gap-1.5 shadow-sm"
+                  className="bg-white hover:bg-slate-50 text-slate-700 text-xs font-extrabold py-2 px-3.5 rounded-xl border border-slate-200 transition flex items-center gap-1.5 shadow-sm"
                 >
-                  <Settings className="w-4 h-4" /> 小説の基本・テーマ設定
+                  <Settings className="w-4 h-4 text-slate-500" /> 小説の基本・テーマ設定
                 </button>
               </div>
             </div>
 
             {/* 開いている小説の概要 */}
-            <div className="bg-white rounded-2xl border border-pink-100 p-5 shadow-sm flex flex-col md:flex-row gap-5 mb-6 items-start md:items-center relative overflow-hidden">
-              <div className="w-16 h-16 rounded-xl overflow-hidden shadow bg-pink-50/50 flex-shrink-0 border border-pink-100">
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col md:flex-row gap-5 mb-6 items-start md:items-center relative overflow-hidden">
+              <div className="w-16 h-16 rounded-xl overflow-hidden shadow bg-slate-50 border border-slate-200 flex-shrink-0">
                 <img
                   src={selectedNovel.coverImage || "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=400"}
                   alt={selectedNovel.title}
@@ -1922,7 +1979,7 @@ export default function App() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] bg-pink-100 text-pink-700 font-extrabold px-2.5 py-0.5 rounded-full">執筆プロジェクト</span>
+                  <span className="text-[10px] bg-pink-500 text-white font-extrabold px-2.5 py-0.5 rounded-full shadow-sm">執筆プロジェクト</span>
                   <span className="text-[10px] bg-slate-100 text-slate-650 px-2 py-0.5 rounded font-mono font-bold border border-slate-200">目標: {selectedNovel.wordGoal || 50000} 字</span>
                 </div>
                 <h3 className="text-xl font-sans font-extrabold mt-1 text-slate-800">{selectedNovel.title}</h3>
@@ -2197,7 +2254,7 @@ export default function App() {
                     </p>
                     <button
                       onClick={() => handleOpenPlotModal()}
-                      className="bg-pink-50 text-pink-600 font-bold text-[11px] px-4 py-2 rounded-lg transition hover:bg-pink-100 border border-pink-200"
+                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-[11px] px-4 py-2 rounded-lg transition border border-slate-200 shadow-sm"
                     >
                       シーンを追加する
                     </button>
@@ -2244,13 +2301,13 @@ export default function App() {
                           <div className="pt-4 mt-4 border-t border-slate-100 flex justify-end gap-1.5 opacity-60 group-hover:opacity-100 transition duration-200">
                             <button
                               onClick={() => handleOpenPlotModal(plot)}
-                              className="text-pink-600 hover:text-pink-700 text-[11px] font-bold px-2.5 py-1 rounded bg-pink-50 hover:bg-pink-100 flex items-center gap-1 transition"
+                              className="text-slate-600 hover:text-slate-800 text-[11px] font-bold px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 flex items-center gap-1 transition shadow-sm"
                             >
-                              <Edit3 className="w-3 h-3" /> 編集
+                              <Edit3 className="w-3.5 h-3.5" /> 編集
                             </button>
                             <button
                               onClick={(e) => handleDeletePlot(plot.id, e)}
-                              className="text-rose-600 hover:text-rose-700 text-[11px] font-bold px-2.5 py-1 rounded hover:bg-rose-55 transition"
+                              className="text-white hover:text-white text-[11px] font-bold px-2.5 py-1 rounded bg-rose-500 hover:bg-rose-600 flex items-center gap-1 transition shadow-sm"
                             >
                               <Trash2 className="w-3 h-3" />
                             </button>
@@ -2408,9 +2465,9 @@ export default function App() {
                       href="https://mofu-mitsu.github.io/orikyara-relationship-chart/" 
                       target="_blank" 
                       rel="noreferrer"
-                      className="bg-pink-50 hover:bg-pink-100/70 text-pink-600 border border-pink-100 font-extrabold text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                      className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 font-extrabold text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" /> 相関図メーカーを起動
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-400" /> 相関図メーカーを起動
                     </a>
                   </div>
 
@@ -2594,15 +2651,15 @@ export default function App() {
                           <div className="pt-3 mt-3 border-t border-slate-100 flex justify-end gap-2 opacity-50 group-hover:opacity-100 transition duration-155">
                             <button
                               onClick={() => handleOpenWorldModal(setDoc)}
-                              className="text-pink-600 hover:text-pink-700 text-[11px] font-bold"
+                              className="text-slate-600 hover:text-slate-800 text-[11px] font-bold px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 flex items-center gap-1 transition shadow-sm"
                             >
-                              編集
+                              <Edit3 className="w-3.5 h-3.5" /> 編集
                             </button>
                             <button
                               onClick={(e) => handleDeleteSetting(setDoc.id, e)}
-                              className="text-rose-600 hover:text-rose-800 text-[11px] font-bold"
+                              className="text-slate-600 hover:text-rose-600 text-[11px] font-bold px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 flex items-center gap-1 transition shadow-sm"
                             >
-                              削除
+                              <Trash2 className="w-3.5 h-3.5" /> 削除
                             </button>
                           </div>
                         </div>
@@ -2760,10 +2817,10 @@ export default function App() {
                       </h4>
                       <button
                         onClick={() => setShowEpisodeModal(true)}
-                        className="p-1 px-2 rounded-lg bg-pink-50 hover:bg-pink-100 text-pink-600 text-xs font-bold transition flex items-center gap-0.5 border border-pink-100"
+                        className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center gap-1"
                         title="新しい章/エピソードを追加"
                       >
-                        <Plus className="w-3.5 h-3.5" /> 追加
+                        <Plus className="w-3.5 h-3.5 text-pink-500" /> 追加
                       </button>
                     </div>
 
@@ -4312,30 +4369,41 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="pt-2 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowPremiumModal(false)}
-                  className="bg-slate-50 hover:bg-slate-150 text-slate-600 font-bold py-2 px-5 rounded-full text-xs transition"
+              <div className="pt-2 flex justify-between gap-3 items-center">
+                <a
+                  href="https://torisproject.booth.pm/items/8498231"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 px-4 rounded-full text-xs transition flex items-center gap-1 shadow-sm"
                 >
-                  閉じる
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (codeInput.includes("MofuPlot25")) {
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  BOOTHでプレミアム機能を確認
+                </a>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowPremiumModal(false)}
+                    className="bg-slate-50 hover:bg-slate-150 text-slate-600 font-bold py-2 px-5 rounded-full text-xs transition"
+                  >
+                    閉じる
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (codeInput.includes("MofuPlot25")) {
                       setIsPremium(true);
                       localStorage.setItem("plot_palette_premium_v1", "true");
-                      alert("👑 プレミアム快適化が正常にアクティベートされました！すべての機能をご堪能ください。");
+                      toast.success("👑 プレミアム快適化が正常にアクティベートされました！すべての機能をご堪能ください。");
                       setShowPremiumModal(false);
                     } else {
-                      alert("❌ 合言葉が確認できませんでした。正しいキーワード（MofuPlot25）が含まれているか、もう一度お確かめください。");
+                      toast.error("❌ 合言葉が確認できませんでした。正しいキーワードが含まれているか、もう一度お確かめください。");
                     }
                   }}
                   className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold py-2.5 px-6 rounded-full text-xs tracking-wider transition shadow-md shadow-amber-200/50"
                 >
                   アップグレード認定 👑
                 </button>
+                </div>
               </div>
             </div>
           </div>
@@ -4368,9 +4436,9 @@ export default function App() {
 
               <div className="border-t border-slate-100 pt-4 space-y-4">
                 <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 font-extrabold text-sm" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>1</div>
+                  <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white shrink-0 font-extrabold text-sm shadow-sm">1</div>
                   <div>
-                    <h5 className="text-xs font-black text-rose-950">プロット（起承転結）を練る</h5>
+                    <h5 className="text-xs font-black text-slate-800">プロット（起承転結）を練る</h5>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       小説を選択後、「プロット」タブから起承転結の各段落にストーリーのキーアイテムや「事件（インシデント）」をカード形式で貼っていけます。起・承・転・結の各構造をスッキリと一覧してストーリーの起伏が崩れていないか整えることができます。
                     </p>
@@ -4378,9 +4446,9 @@ export default function App() {
                 </div>
 
                 <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center text-pink-600 shrink-0 font-extrabold text-sm" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>2</div>
+                  <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white shrink-0 font-extrabold text-sm shadow-sm">2</div>
                   <div>
-                    <h5 className="text-xs font-black text-rose-950">登場人物・配役パレットをつくる</h5>
+                    <h5 className="text-xs font-black text-slate-800">登場人物・配役パレットをつくる</h5>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       「登場人物」タブでは、キャラクターの配役（主人公、お助けキャラ、ライバル等）、外見、性格、および無限のカスタムプロフィールを追加できます！さらに、各キャラクターへ設定を結び、執筆へのモチベーションを高めます。
                     </p>
@@ -4388,9 +4456,9 @@ export default function App() {
                 </div>
 
                 <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 shrink-0 font-extrabold text-sm" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>3</div>
+                  <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white shrink-0 font-extrabold text-sm shadow-sm">3</div>
                   <div>
-                    <h5 className="text-xs font-black text-rose-950">世界観や年表・伏線回収</h5>
+                    <h5 className="text-xs font-black text-slate-800">世界観や年表・伏線回収</h5>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       用語集や歴史年表、そして創作で最も失念しがちな「伏線伏線（Fusen）」を設定し、それらが回収されたかどうか「未回収」「回収済」のオンオフスイッチで視覚的にマーク。これでもうお話の破綻とはおさらばです！
                     </p>
@@ -4398,19 +4466,19 @@ export default function App() {
                 </div>
 
                 <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 font-extrabold text-sm" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>4</div>
+                  <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white shrink-0 font-extrabold text-sm shadow-sm">4</div>
                   <div>
-                    <h5 className="text-xs font-black text-rose-950">ひらめき付箋・一筆スクラップ</h5>
+                    <h5 className="text-xs font-black text-slate-800">ひらめき付箋・一筆スクラップ</h5>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      「ひらめき付箋（Memos）」は、いつでも瞬時にセリフや情景案、後々使いたいアイデアをカードの一筆箋にしてスクラップ貼り付け。横断検索エンジン（虫きにみつきTi検索）とも連動するため、どこに書いても一瞬で発見できます！
+                      「ひらめき付箋（Memos）」は、いつでも瞬時にセリフや情景案、後々使いたいアイデアをカードの一筆箋にしてスクラップ貼り付け。横断検索エンジン（虫眼鏡検索）とも連動するため、どこに書いても一瞬で発見できます！
                     </p>
                   </div>
                 </div>
 
                 <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0 font-extrabold text-sm" style={{ backgroundColor: "var(--accent-light, #fef1f2)", color: "var(--accent-color)" }}>5</div>
+                  <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white shrink-0 font-extrabold text-sm shadow-sm">5</div>
                   <div>
-                    <h5 className="text-xs font-black text-rose-950">エディター執筆（縦書き ↔ 横書き） 🖨️</h5>
+                    <h5 className="text-xs font-black text-slate-800">エディター執筆（縦書き ↔ 横書き） 🖨️</h5>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       縦書きモードを使うと、日本の美しい縦書き原稿用紙スタイルで、心地よい余白とともに感情豊かに物語を書き留められます。PDF/印刷出力機能を使うと、各お話をそのまま縦書きの綺麗な小説組版にしてPDF保存＆印刷できます！
                     </p>
@@ -4481,29 +4549,28 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => {
-                    const text = selectedNovel 
+                    const shareText = selectedNovel 
                       ? `私の執筆アトリエ「Plot Palette」で、創作小説『${selectedNovel.title}』のプロットを構築中！✨\n\nあらすじ: ${selectedNovel.description ? selectedNovel.description.substring(0, 50) + "..." : "設定中..."}\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
                       : `創作ストーリー支援アトリエ「Plot Palette」でプロットや関係図、世界観伏線を構築しています！🎨\n起承転結を並べて美しい小説、お話を。縦書き全画面執筆も最高に捗る…！\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`;
-                    navigator.clipboard.writeText(text);
-                    alert("📢 投稿テキストをクリップボードにコピーしました！SNSに貼り付けて共有してください。");
+                    
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'Plot Palette',
+                        text: shareText,
+                      }).catch((err) => {
+                        console.error('Error sharing:', err);
+                      });
+                    } else {
+                      navigator.clipboard.writeText(shareText);
+                      toast.success("📋 共有機能がサポートされていないため、テキストをクリップボードにコピーしました！SNS等で共有してください。");
+                    }
                   }}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-black py-2.5 px-4 rounded-xl transition text-center"
+                  className="flex-1 bg-pink-500 hover:bg-pink-600 text-white text-xs font-black py-3 px-4 rounded-xl transition text-center flex items-center justify-center gap-2 shadow-sm"
+                  style={{ backgroundColor: "var(--accent-color)" }}
                 >
-                  📋 テキストをコピー
+                  <Share2 className="w-4 h-4" />
+                  <span>アプリを通して共有する</span>
                 </button>
-
-                <a
-                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
-                    selectedNovel 
-                      ? `私の執筆アトリエ「Plot Palette」で、創作小説『${selectedNovel.title}』のプロットを構築中！✨\n\nあらすじ: ${selectedNovel.description ? selectedNovel.description.substring(0, 50) + "..." : "設定中..."}\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
-                      : `創作ストーリー支援アトリエ「Plot Palette」でプロットや関係図、世界観伏線を構築しています！🎨\n起承転結を並べて美しい小説、お話を。縦書き全画面執筆も最高に捗る…！\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 bg-[#1da1f2] hover:bg-[#1a91da] text-white text-xs font-black py-2.5 px-4 rounded-xl transition text-center flex items-center justify-center gap-1.5"
-                >
-                  <span>X でポスト📢</span>
-                </a>
               </div>
             </div>
             
@@ -4545,18 +4612,11 @@ export default function App() {
               ))}
             </div>
             
-            <div className="print:hidden bg-pink-50 p-4 rounded-xl text-center text-xs font-bold text-pink-700 border border-pink-100 space-y-2">
-              <p>🖨️ システム用印刷ダイアログを自動的に呼び出しました。</p>
-              <p className="text-[10px] text-slate-400 font-normal">
-                表示されない場合は、お使いのブラウザのメニューから「印刷（PDFとして保存）」を選択してください。
-              </p>
-              <button 
-                onClick={() => { window.print(); }} 
-                className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-full text-xs shadow-sm"
-              >
-                手動で印刷ダイアログを開く
-              </button>
-            </div>
+            {!isPremium && (
+              <div className="mt-12 text-center text-[10px] text-slate-400 font-sans tracking-widest border-t border-slate-100 pt-4">
+                 Created by 創作支援アトリエ Plot Palette
+              </div>
+            )}
           </div>
         </div>
       )}
