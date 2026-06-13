@@ -35,126 +35,166 @@ async function initializeTables(sqlClient: any) {
       }
     };
 
+    // Pre-execution Schema Healing step: Check if table 'users' exists and has 'open_id' column
     try {
-      // 0. Enable pgcrypto for gen_random_uuid()
-      await runQuery("pgcrypto extension", () => sqlClient`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
-
-      // 1. users table
-      await runQuery("users table", () => sqlClient`
-        CREATE TABLE IF NOT EXISTS users (
-          open_id TEXT PRIMARY KEY,
-          name TEXT,
-          email TEXT,
-          login_method TEXT,
-          last_signed_in TIMESTAMP,
-          created_at TIMESTAMP DEFAULT NOW()
+      const checkUsersTable = await sqlClient`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = 'users'
         );
-      `);
+      `;
+      if (checkUsersTable && checkUsersTable[0] && checkUsersTable[0].exists) {
+        const columns = await sqlClient`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_schema = 'public' AND table_name = 'users';
+        `;
+        const hasOpenIdCol = columns.some((col: any) => col.column_name === "open_id");
+        if (!hasOpenIdCol) {
+          console.warn("[DB Debug] ⚠ Stale 'users' table found without 'open_id' column. Wiping entire schema for clean sync.");
+          initLogs.push(`[${new Date().toISOString()}] ⚠ Old 'users' schema detected (missing 'open_id'). Triggering CASCADE schema wipe.`);
+          await sqlClient`DROP TABLE IF EXISTS memos, settings, episodes, characters, plots, novels, users CASCADE;`;
+        }
+      }
+    } catch (err: any) {
+      console.warn("[DB Debug] Error checking/dropping stale users schema:", err.message || err);
+    }
 
-      // 2. novels table
-      await runQuery("novels table", () => sqlClient`
-        CREATE TABLE IF NOT EXISTS novels (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_id TEXT REFERENCES users(open_id) ON DELETE CASCADE,
-          title TEXT NOT NULL,
-          description TEXT,
-          cover_image TEXT,
-          theme_doc TEXT,
-          target_audience TEXT,
-          ending_doc TEXT,
-          word_goal INTEGER DEFAULT 50000,
-          write_days INTEGER DEFAULT 30,
-          chart_image TEXT,
-          chart_memo TEXT,
-          reference_links JSONB DEFAULT '[]'::jsonb,
-          created_at TIMESTAMP DEFAULT NOW(),
-          updated_at TIMESTAMP DEFAULT NOW()
-        );
-      `);
+    let retryCount = 1;
+    while (retryCount >= 0) {
+      try {
+        // 0. Enable pgcrypto for gen_random_uuid()
+        await runQuery("pgcrypto extension", () => sqlClient`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
 
-      // 3. plots table
-      await runQuery("plots table", () => sqlClient`
-        CREATE TABLE IF NOT EXISTS plots (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
-          title TEXT NOT NULL,
-          content TEXT,
-          order_no TEXT,
-          phase TEXT DEFAULT '起',
-          timeline_date TEXT,
-          created_at TIMESTAMP DEFAULT NOW()
-        );
-      `);
+        // 1. users table
+        await runQuery("users table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS users (
+            open_id TEXT PRIMARY KEY,
+            name TEXT,
+            email TEXT,
+            login_method TEXT,
+            last_signed_in TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW()
+          );
+        `);
 
-      // 4. characters table
-      await runQuery("characters table", () => sqlClient`
-        CREATE TABLE IF NOT EXISTS characters (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
-          name TEXT NOT NULL,
-          role TEXT,
-          description TEXT,
-          age TEXT,
-          appearance TEXT,
-          personality TEXT,
-          relation_info TEXT,
-          image_url TEXT,
-          custom_fields JSONB DEFAULT '[]'::jsonb,
-          created_at TIMESTAMP DEFAULT NOW()
-        );
-      `);
+        // 2. novels table
+        await runQuery("novels table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS novels (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id TEXT REFERENCES users(open_id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            description TEXT,
+            cover_image TEXT,
+            theme_doc TEXT,
+            target_audience TEXT,
+            ending_doc TEXT,
+            word_goal INTEGER DEFAULT 50000,
+            write_days INTEGER DEFAULT 30,
+            chart_image TEXT,
+            chart_memo TEXT,
+            reference_links JSONB DEFAULT '[]'::jsonb,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+          );
+        `);
 
-      // 5. episodes table
-      await runQuery("episodes table", () => sqlClient`
-        CREATE TABLE IF NOT EXISTS episodes (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
-          title TEXT NOT NULL,
-          body TEXT DEFAULT '',
-          status TEXT DEFAULT '下書き',
-          tag TEXT DEFAULT '本編',
-          word_count INTEGER DEFAULT 0,
-          created_at TIMESTAMP DEFAULT NOW()
-        );
-      `);
+        // 3. plots table
+        await runQuery("plots table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS plots (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            content TEXT,
+            order_no TEXT,
+            phase TEXT DEFAULT '起',
+            timeline_date TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+          );
+        `);
 
-      // 6. settings table
-      await runQuery("settings table", () => sqlClient`
-        CREATE TABLE IF NOT EXISTS settings (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
-          title TEXT NOT NULL,
-          category TEXT DEFAULT '世界観',
-          detail TEXT DEFAULT '',
-          is_fusen BOOLEAN DEFAULT false,
-          fusen_status TEXT DEFAULT '未回収',
-          created_at TIMESTAMP DEFAULT NOW()
-        );
-      `);
+        // 4. characters table
+        await runQuery("characters table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS characters (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            role TEXT,
+            description TEXT,
+            age TEXT,
+            appearance TEXT,
+            personality TEXT,
+            relation_info TEXT,
+            image_url TEXT,
+            custom_fields JSONB DEFAULT '[]'::jsonb,
+            created_at TIMESTAMP DEFAULT NOW()
+          );
+        `);
 
-      // 7. memos (mementos) table
-      await runQuery("memos table", () => sqlClient`
-        CREATE TABLE IF NOT EXISTS memos (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
-          title TEXT DEFAULT '無題のメモ',
-          content TEXT DEFAULT '',
-          color TEXT DEFAULT '#fffbeb',
-          created_at TIMESTAMP DEFAULT NOW()
-        );
-      `);
+        // 5. episodes table
+        await runQuery("episodes table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS episodes (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            body TEXT DEFAULT '',
+            status TEXT DEFAULT '下書き',
+            tag TEXT DEFAULT '本編',
+            word_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+          );
+        `);
 
-      initialized = true;
-      console.log("[DB Debug] 🎉 All database tables checked and verified successfully with Supabase Postgres!");
-      initLogs.push(`[${new Date().toISOString()}] 🎉 All database tables checked and verified successfully with Supabase Postgres!`);
-    } catch (outerError: any) {
-      console.error("[DB Debug] ❌ Outer database auto-initialization failed:", outerError);
-      initLogs.push(`[${new Date().toISOString()}] ❌ Outer failed: ${outerError.message || outerError}`);
-      initialized = false;
-      initPromise = null;
-      throw outerError;
-    } finally {
-      isInitializing = false;
+        // 6. settings table
+        await runQuery("settings table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS settings (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            category TEXT DEFAULT '世界観',
+            detail TEXT DEFAULT '',
+            is_fusen BOOLEAN DEFAULT false,
+            fusen_status TEXT DEFAULT '未回収',
+            created_at TIMESTAMP DEFAULT NOW()
+          );
+        `);
+
+        // 7. memos (mementos) table
+        await runQuery("memos table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS memos (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
+            title TEXT DEFAULT '無題のメモ',
+            content TEXT DEFAULT '',
+            color TEXT DEFAULT '#fffbeb',
+            created_at TIMESTAMP DEFAULT NOW()
+          );
+        `);
+
+        initialized = true;
+        console.log("[DB Debug] 🎉 All database tables checked and verified successfully with Supabase Postgres!");
+        initLogs.push(`[${new Date().toISOString()}] 🎉 All database tables checked and verified successfully with Supabase Postgres!`);
+        break; // Success! exit retry loop
+      } catch (outerError: any) {
+        console.error(`[DB Debug] ❌ Database build failed (Remaining Retries: ${retryCount}):`, outerError.message || outerError);
+        initLogs.push(`[${new Date().toISOString()}] ❌ Build step failed: ${outerError.message || outerError}`);
+        
+        if (retryCount > 0) {
+          retryCount--;
+          console.warn("[DB Debug] ⚠ Triggering full cascade DROP and schema rebuilding retry...");
+          initLogs.push(`[${new Date().toISOString()}] ⚠ Carrying out safe complete schema cascade drop and retry initialization...`);
+          try {
+            await sqlClient`DROP TABLE IF EXISTS memos, settings, episodes, characters, plots, novels, users CASCADE;`;
+          } catch (dropErr: any) {
+            console.error("[DB Debug] Fallback CASCADE drop failed:", dropErr.message || dropErr);
+          }
+        } else {
+          initialized = false;
+          initPromise = null;
+          isInitializing = false;
+          throw outerError;
+        }
+      }
     }
   })();
 
