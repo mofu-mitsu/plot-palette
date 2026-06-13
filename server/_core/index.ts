@@ -5,7 +5,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { sdk } from "./sdk";
 import { COOKIE_NAME } from "../../shared/const";
 import { getDb } from "../db";
-import { users, novels, plots, characters } from "../../drizzle/schema";
+import { users, novels, plots, characters, episodes, settings, mementos } from "../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
 const app = express();
@@ -59,6 +59,12 @@ function requireAuth(req: any, res: any, next: any) {
   next();
 }
 
+// UUID validation helper to prevent syntax errors in Postgres queries
+function isValidUuid(id: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+}
+
 // In-Memory fallback database for unconfigured or dry environments
 interface MockDb {
   novels: any[];
@@ -103,7 +109,7 @@ const mockDb: MockDb = {
       role: "主人公",
       description: "工芸都市クロノプレイス chimneys の時計職人の見習い少年。無茶な無愛想さを見せるが、困っている人や壊れた機械を放っておけない心優しい性格。",
       age: "16",
-      appearance: "煤まみれのブラウンの作業用エプロン、ブラス製ゴーグル、小さな懐中時計",
+      appearance: "煤まみれのブラウン of 作業用エプロン、ブラス製ゴーグル、小さな懐中時計",
       personality: "冷静沈着で手先が器用、少し皮肉屋だが誠実なISTPタイプ",
       relationInfo: "シエラのオルゴールを修理することをきっかけに、彼女の記憶を追う相棒役となる。",
     },
@@ -169,15 +175,11 @@ app.get("/api/novels", requireAuth, async (req: any, res) => {
 
   if (dbConnection) {
     try {
+      console.log(`[API Debug] Fetching novels from Supabase for user '${openId}'`);
       const results = await dbConnection.select().from(novels).where(eq(novels.userId, openId));
-      // Drizzle schemas might not have themeDoc etc., so we auto map properties from in-memory fallback or keep standard
-      const mapped = results.map((r: any) => {
-        const memMatch = mockDb.novels.find(m => m.id === r.id);
-        return { ...r, ...memMatch };
-      });
-      return res.json(mapped);
+      return res.json(results);
     } catch (e) {
-      console.error("[API] Failed to fetch novels from PG, falling back:", e);
+      console.error("[API Debug] ❌ Failed to fetch novels from PG, using in-memory mock fallback:", e);
     }
   }
 
@@ -188,32 +190,47 @@ app.get("/api/novels", requireAuth, async (req: any, res) => {
 
 app.post("/api/novels", requireAuth, async (req: any, res) => {
   const openId = req.user.openId;
-  const { title, description, coverImage, themeDoc, targetAudience, endingDoc, wordGoal, writeDays, chartImage, chartMemo, referenceLinks } = req.body;
+  const { 
+    title, description, coverImage, themeDoc, targetAudience, 
+    endingDoc, wordGoal, writeDays, chartImage, chartMemo, referenceLinks 
+  } = req.body;
 
   if (!title) {
     return res.status(400).json({ error: "Title is required" });
   }
 
-  const generatedId = `novel-${Date.now()}`;
   const dbConnection = getDb();
-  let createdNovel: any = null;
-
   if (dbConnection) {
     try {
+      console.log(`[API Debug] Creating new novel into Supabase: '${title}'`);
       const [inserted] = await dbConnection.insert(novels).values({
         userId: openId,
         title,
-        description,
+        description: description || "",
         coverImage: coverImage || "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=400",
+        themeDoc: themeDoc || "",
+        targetAudience: targetAudience || "",
+        endingDoc: endingDoc || "",
+        wordGoal: Number(wordGoal) || 50000,
+        writeDays: Number(writeDays) || 30,
+        chartImage: chartImage || "",
+        chartMemo: chartMemo || "",
+        referenceLinks: referenceLinks || [],
       }).returning();
-      createdNovel = inserted;
+
+      if (inserted) {
+        console.log(`[API Debug] ✔ Successfully created novel '${inserted.id}'`);
+        return res.json(inserted);
+      }
     } catch (e) {
-      console.error("[API] Failed to save novel in PG, falling back to mockDb:", e);
+      console.error("[API Debug] ❌ Failed to save novel in SQL database, fallback to mock memory:", e);
     }
   }
 
+  // Purely in-memory mock fallback
+  const generatedId = `novel-${Date.now()}`;
   const newNovel = {
-    id: createdNovel ? createdNovel.id : generatedId,
+    id: generatedId,
     userId: openId,
     title,
     description: description || "",
@@ -235,21 +252,40 @@ app.post("/api/novels", requireAuth, async (req: any, res) => {
 
 app.put("/api/novels/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
-  const { title, description, coverImage, themeDoc, targetAudience, endingDoc, wordGoal, writeDays, chartImage, chartMemo, referenceLinks } = req.body;
+  const { 
+    title, description, coverImage, themeDoc, targetAudience, 
+    endingDoc, wordGoal, writeDays, chartImage, chartMemo, referenceLinks 
+  } = req.body;
 
   const dbConnection = getDb();
-  if (dbConnection) {
+  if (dbConnection && isValidUuid(id)) {
     try {
-      await dbConnection.update(novels).set({
+      console.log(`[API Debug] Updating novel in Supabase: '${id}'`);
+      const [updated] = await dbConnection.update(novels).set({
         title,
-        description,
+        description: description || "",
         coverImage,
-      }).where(eq(novels.id, id));
+        themeDoc: themeDoc || "",
+        targetAudience: targetAudience || "",
+        endingDoc: endingDoc || "",
+        wordGoal: Number(wordGoal) || 50000,
+        writeDays: Number(writeDays) || 30,
+        chartImage: chartImage || "",
+        chartMemo: chartMemo || "",
+        referenceLinks: referenceLinks || [],
+        updatedAt: new Date(),
+      }).where(eq(novels.id, id)).returning();
+
+      if (updated) {
+        console.log(`[API Debug] ✔ Novel '${id}' updated successfully in PG`);
+        return res.json(updated);
+      }
     } catch (e) {
-      console.error("[API] Failed to update PG novel:", e);
+      console.error(`[API Debug] ❌ Failed to update Supabase novel for '${id}':`, e);
     }
   }
 
+  // Memory fallback
   const idx = mockDb.novels.findIndex((n) => n.id === id);
   if (idx !== -1) {
     mockDb.novels[idx] = {
@@ -276,16 +312,18 @@ app.delete("/api/novels/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
   const dbConnection = getDb();
 
-  if (dbConnection) {
+  if (dbConnection && isValidUuid(id)) {
     try {
-      await dbConnection.delete(plots).where(eq(plots.novelId, id));
-      await dbConnection.delete(characters).where(eq(characters.novelId, id));
+      console.log(`[API Debug] Deleting novel '${id}' and cascades from Supabase`);
       await dbConnection.delete(novels).where(eq(novels.id, id));
+      console.log(`[API Debug] ✔ Novel and cascades successfully deleted in DB`);
+      return res.json({ success: true });
     } catch (e) {
-      console.error("[API] Novel deletion in DB failed:", e);
+      console.error(`[API Debug] ❌ Supabase novel deletion failed for '${id}':`, e);
     }
   }
 
+  // Fallback deletion
   mockDb.novels = mockDb.novels.filter((n) => n.id !== id);
   mockDb.plots = mockDb.plots.filter((p) => p.novelId !== id);
   mockDb.characters = mockDb.characters.filter((c) => c.novelId !== id);
@@ -300,16 +338,13 @@ app.get("/api/novels/:novelId/plots", requireAuth, async (req: any, res) => {
   const { novelId } = req.params;
   const dbConnection = getDb();
 
-  if (dbConnection) {
+  if (dbConnection && isValidUuid(novelId)) {
     try {
+      console.log(`[API Debug] Fetching plots from Supabase or world state for novel '${novelId}'`);
       const results = await dbConnection.select().from(plots).where(eq(plots.novelId, novelId));
-      const mapped = results.map((r: any) => {
-        const mem = mockDb.plots.find(p => p.id === r.id);
-        return { ...r, ...mem };
-      });
-      return res.json(mapped);
+      return res.json(results);
     } catch (e) {
-      console.error("[API] Failed to fetch plots from Database, falling back:", e);
+      console.error("[API Debug] ❌ Failed to fetch plots from Database, using fallback:", e);
     }
   }
 
@@ -325,26 +360,32 @@ app.post("/api/novels/:novelId/plots", requireAuth, async (req: any, res) => {
     return res.status(400).json({ error: "Title is required" });
   }
 
-  const generatedId = `plot-${Date.now()}`;
   const dbConnection = getDb();
-  let createdPlot: any = null;
-
-  if (dbConnection) {
+  if (dbConnection && isValidUuid(novelId)) {
     try {
+      console.log(`[API Debug] Saving plot into PG for novel ID: '${novelId}'`);
       const [inserted] = await dbConnection.insert(plots).values({
         novelId,
         title,
         content: content || "",
+        phase: phase || "起",
+        timelineDate: timelineDate || "",
         orderNo: "a",
       }).returning();
-      createdPlot = inserted;
+
+      if (inserted) {
+        console.log(`[API Debug] ✔ Plot '${inserted.id}' saved in Supabase`);
+        return res.json(inserted);
+      }
     } catch (e) {
-      console.error("[API] Failed to create plot in DB, falling back:", e);
+      console.error("[API Debug] ❌ Failed to create plot in DB:", e);
     }
   }
 
+  // Fallback
+  const generatedId = `plot-${Date.now()}`;
   const newPlot = {
-    id: createdPlot ? createdPlot.id : generatedId,
+    id: generatedId,
     novelId,
     title,
     content: content || "",
@@ -357,15 +398,26 @@ app.post("/api/novels/:novelId/plots", requireAuth, async (req: any, res) => {
 });
 
 app.put("/api/novels/:novelId/plots/:id", requireAuth, async (req: any, res) => {
-  const { novelId, id } = req.params;
+  const { id } = req.params;
   const { title, content, phase, timelineDate } = req.body;
 
   const dbConnection = getDb();
-  if (dbConnection) {
+  if (dbConnection && isValidUuid(id)) {
     try {
-      await dbConnection.update(plots).set({ title, content }).where(eq(plots.id, id));
+      console.log(`[API Debug] Updating plot: '${id}'`);
+      const [updated] = await dbConnection.update(plots).set({ 
+        title, 
+        content,
+        phase: phase || "起",
+        timelineDate: timelineDate || ""
+      }).where(eq(plots.id, id)).returning();
+
+      if (updated) {
+        console.log(`[API Debug] ✔ Plot '${id}' updated in PG`);
+        return res.json(updated);
+      }
     } catch (e) {
-      console.error("[API] Failed to update plot in DB:", e);
+      console.error("[API Debug] ❌ Failed to update plot in DB:", e);
     }
   }
 
@@ -384,13 +436,15 @@ app.put("/api/novels/:novelId/plots/:id", requireAuth, async (req: any, res) => 
 });
 
 app.delete("/api/novels/:novelId/plots/:id", requireAuth, async (req: any, res) => {
-  const { novelId, id } = req.params;
+  const { id } = req.params;
   const dbConnection = getDb();
-  if (dbConnection) {
+  if (dbConnection && isValidUuid(id)) {
     try {
+      console.log(`[API Debug] Deleting plot '${id}'`);
       await dbConnection.delete(plots).where(eq(plots.id, id));
+      return res.json({ success: true });
     } catch (e) {
-      console.error("[API] Failed to delete plot in DB:", e);
+      console.error("[API Debug] ❌ Failed to delete plot in DB:", e);
     }
   }
   mockDb.plots = mockDb.plots.filter(p => p.id !== id);
@@ -402,16 +456,13 @@ app.get("/api/novels/:novelId/characters", requireAuth, async (req: any, res) =>
   const { novelId } = req.params;
   const dbConnection = getDb();
 
-  if (dbConnection) {
+  if (dbConnection && isValidUuid(novelId)) {
     try {
+      console.log(`[API Debug] Fetching characters for novel '${novelId}' from PG`);
       const results = await dbConnection.select().from(characters).where(eq(characters.novelId, novelId));
-      const mapped = results.map((r: any) => {
-        const mem = mockDb.characters.find(c => c.id === r.id);
-        return { ...r, ...mem };
-      });
-      return res.json(mapped);
+      return res.json(results);
     } catch (e) {
-      console.error("[API] Failed to fetch characters from DB, falling back:", e);
+      console.error("[API Debug] ❌ Failed to fetch characters from DB, falling back:", e);
     }
   }
 
@@ -427,12 +478,10 @@ app.post("/api/novels/:novelId/characters", requireAuth, async (req: any, res) =
     return res.status(400).json({ error: "Character name is required" });
   }
 
-  const generatedId = `char-${Date.now()}`;
   const dbConnection = getDb();
-  let createdChar: any = null;
-
-  if (dbConnection) {
+  if (dbConnection && isValidUuid(novelId)) {
     try {
+      console.log(`[API Debug] Inserting character for novel: '${novelId}' into PG`);
       const [inserted] = await dbConnection.insert(characters).values({
         novelId,
         name,
@@ -442,15 +491,22 @@ app.post("/api/novels/:novelId/characters", requireAuth, async (req: any, res) =
         appearance: appearance || "",
         personality: personality || "",
         relationInfo: relationInfo || "",
+        imageUrl: imageUrl || "",
+        customFields: customFields || [],
       }).returning();
-      createdChar = inserted;
+
+      if (inserted) {
+        console.log(`[API Debug] ✔ Character '${inserted.id}' inserted into PG`);
+        return res.json(inserted);
+      }
     } catch (e) {
-      console.error("[API] Failed to insert character in DB, falling back:", e);
+      console.error("[API Debug] ❌ Failed to insert character in DB, falling back:", e);
     }
   }
 
+  const generatedId = `char-${Date.now()}`;
   const newChar = {
-    id: createdChar ? createdChar.id : generatedId,
+    id: generatedId,
     novelId,
     name,
     role: role || "",
@@ -467,17 +523,31 @@ app.post("/api/novels/:novelId/characters", requireAuth, async (req: any, res) =
 });
 
 app.put("/api/novels/:novelId/characters/:id", requireAuth, async (req: any, res) => {
-  const { novelId, id } = req.params;
+  const { id } = req.params;
   const { name, role, description, age, appearance, personality, relationInfo, imageUrl, customFields } = req.body;
 
   const dbConnection = getDb();
-  if (dbConnection) {
+  if (dbConnection && isValidUuid(id)) {
     try {
-      await dbConnection.update(characters).set({
-        name, role, description, age, appearance, personality, relationInfo
-      }).where(eq(characters.id, id));
+      console.log(`[API Debug] Updating character: '${id}'`);
+      const [updated] = await dbConnection.update(characters).set({
+        name, 
+        role: role || "", 
+        description: description || "", 
+        age: age || "", 
+        appearance: appearance || "", 
+        personality: personality || "", 
+        relationInfo: relationInfo || "",
+        imageUrl: imageUrl || "",
+        customFields: customFields || [],
+      }).where(eq(characters.id, id)).returning();
+
+      if (updated) {
+        console.log(`[API Debug] ✔ Character '${id}' updated successfully`);
+        return res.json(updated);
+      }
     } catch (e) {
-      console.error("[API] Failed to update character in DB:", e);
+      console.error("[API Debug] ❌ Failed to update character in DB:", e);
     }
   }
 
@@ -501,22 +571,36 @@ app.put("/api/novels/:novelId/characters/:id", requireAuth, async (req: any, res
 });
 
 app.delete("/api/novels/:novelId/characters/:id", requireAuth, async (req: any, res) => {
-  const { novelId, id } = req.params;
+  const { id } = req.params;
   const dbConnection = getDb();
-  if (dbConnection) {
+  if (dbConnection && isValidUuid(id)) {
     try {
+      console.log(`[API Debug] Deleting character '${id}' from PG`);
       await dbConnection.delete(characters).where(eq(characters.id, id));
+      return res.json({ success: true });
     } catch (e) {
-      console.error("[API] Failed to delete character in DB:", e);
+      console.error("[API Debug] ❌ Failed to delete character in DB:", e);
     }
   }
   mockDb.characters = mockDb.characters.filter(c => c.id !== id);
   res.json({ success: true });
 });
 
-// --- Episodes API (Manus/Nora Chapter management) ---
+// --- Episodes API ---
 app.get("/api/novels/:novelId/episodes", requireAuth, async (req: any, res) => {
   const { novelId } = req.params;
+  const dbConnection = getDb();
+
+  if (dbConnection && isValidUuid(novelId)) {
+    try {
+      console.log(`[API Debug] Fetching episodes for novel '${novelId}' from PG`);
+      const results = await dbConnection.select().from(episodes).where(eq(episodes.novelId, novelId));
+      return res.json(results);
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to fetch episodes from SQL database:", e);
+    }
+  }
+
   const results = mockDb.episodes.filter((e) => e.novelId === novelId);
   res.json(results);
 });
@@ -527,6 +611,28 @@ app.post("/api/novels/:novelId/episodes", requireAuth, async (req: any, res) => 
 
   if (!title) {
     return res.status(400).json({ error: "Title is required" });
+  }
+
+  const dbConnection = getDb();
+  if (dbConnection && isValidUuid(novelId)) {
+    try {
+      console.log(`[API Debug] Inserting episode for novel '${novelId}' into PG`);
+      const [inserted] = await dbConnection.insert(episodes).values({
+        novelId,
+        title,
+        body: body || "",
+        status: status || "下書き",
+        tag: tag || "本編",
+        wordCount: Number(wordCount) || 0,
+      }).returning();
+
+      if (inserted) {
+        console.log(`[API Debug] ✔ Episode '${inserted.id}' saved in Supabase`);
+        return res.json(inserted);
+      }
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to save episode in SQL database:", e);
+    }
   }
 
   const newEpisode = {
@@ -548,6 +654,27 @@ app.put("/api/novels/:novelId/episodes/:id", requireAuth, async (req: any, res) 
   const { id } = req.params;
   const { title, body, status, tag, wordCount } = req.body;
 
+  const dbConnection = getDb();
+  if (dbConnection && isValidUuid(id)) {
+    try {
+      console.log(`[API Debug] Updating episode: '${id}'`);
+      const [updated] = await dbConnection.update(episodes).set({
+        title,
+        body: body || "",
+        status: status || "下書き",
+        tag: tag || "本編",
+        wordCount: Number(wordCount) || 0,
+      }).where(eq(episodes.id, id)).returning();
+
+      if (updated) {
+        console.log(`[API Debug] ✔ Episode '${id}' updated in PG`);
+        return res.json(updated);
+      }
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to update episode in DB:", e);
+    }
+  }
+
   const idx = mockDb.episodes.findIndex((e) => e.id === id);
   if (idx !== -1) {
     mockDb.episodes[idx] = {
@@ -565,13 +692,35 @@ app.put("/api/novels/:novelId/episodes/:id", requireAuth, async (req: any, res) 
 
 app.delete("/api/novels/:novelId/episodes/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
+  const dbConnection = getDb();
+  if (dbConnection && isValidUuid(id)) {
+    try {
+      console.log(`[API Debug] Deleting episode: '${id}'`);
+      await dbConnection.delete(episodes).where(eq(episodes.id, id));
+      return res.json({ success: true });
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to delete episode in DB:", e);
+    }
+  }
   mockDb.episodes = mockDb.episodes.filter((e) => e.id !== id);
   res.json({ success: true });
 });
 
-// --- SettingWorld API (World lore & Fusen management) ---
+// --- SettingWorld API ---
 app.get("/api/novels/:novelId/settings", requireAuth, async (req: any, res) => {
   const { novelId } = req.params;
+  const dbConnection = getDb();
+
+  if (dbConnection && isValidUuid(novelId)) {
+    try {
+      console.log(`[API Debug] Fetching settings for novel '${novelId}' from PG`);
+      const results = await dbConnection.select().from(settings).where(eq(settings.novelId, novelId));
+      return res.json(results);
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to fetch settings from PG:", e);
+    }
+  }
+
   const results = mockDb.settings.filter((s) => s.novelId === novelId);
   res.json(results);
 });
@@ -582,6 +731,28 @@ app.post("/api/novels/:novelId/settings", requireAuth, async (req: any, res) => 
 
   if (!title) {
     return res.status(400).json({ error: "Title is required" });
+  }
+
+  const dbConnection = getDb();
+  if (dbConnection && isValidUuid(novelId)) {
+    try {
+      console.log(`[API Debug] Saving setting for novel '${novelId}' in PG`);
+      const [inserted] = await dbConnection.insert(settings).values({
+        novelId,
+        title,
+        category: category || "世界観",
+        detail: detail || "",
+        isFusen: !!isFusen,
+        fusenStatus: fusenStatus || "未回収",
+      }).returning();
+
+      if (inserted) {
+        console.log(`[API Debug] ✔ Setting '${inserted.id}' saved successfully`);
+        return res.json(inserted);
+      }
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to save setting in PG:", e);
+    }
   }
 
   const newSetting = {
@@ -602,6 +773,27 @@ app.put("/api/novels/:novelId/settings/:id", requireAuth, async (req: any, res) 
   const { id } = req.params;
   const { title, category, detail, isFusen, fusenStatus } = req.body;
 
+  const dbConnection = getDb();
+  if (dbConnection && isValidUuid(id)) {
+    try {
+      console.log(`[API Debug] Updating setting: '${id}'`);
+      const [updated] = await dbConnection.update(settings).set({
+        title,
+        category: category || "世界観",
+        detail: detail || "",
+        isFusen: !!isFusen,
+        fusenStatus: fusenStatus || "未回収",
+      }).where(eq(settings.id, id)).returning();
+
+      if (updated) {
+        console.log(`[API Debug] ✔ Setting '${id}' updated in PG`);
+        return res.json(updated);
+      }
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to update setting in DB:", e);
+    }
+  }
+
   const idx = mockDb.settings.findIndex((s) => s.id === id);
   if (idx !== -1) {
     mockDb.settings[idx] = {
@@ -619,13 +811,35 @@ app.put("/api/novels/:novelId/settings/:id", requireAuth, async (req: any, res) 
 
 app.delete("/api/novels/:novelId/settings/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
+  const dbConnection = getDb();
+  if (dbConnection && isValidUuid(id)) {
+    try {
+      console.log(`[API Debug] Deleting setting: '${id}'`);
+      await dbConnection.delete(settings).where(eq(settings.id, id));
+      return res.json({ success: true });
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to delete setting from DB:", e);
+    }
+  }
   mockDb.settings = mockDb.settings.filter((s) => s.id !== id);
   res.json({ success: true });
 });
 
-// --- MemoIdea API (Memos and dialogue collection) ---
+// --- MemoIdea API ---
 app.get("/api/novels/:novelId/memos", requireAuth, async (req: any, res) => {
   const { novelId } = req.params;
+  const dbConnection = getDb();
+
+  if (dbConnection && isValidUuid(novelId)) {
+    try {
+      console.log(`[API Debug] Fetching memos for novel '${novelId}' from PG`);
+      const results = await dbConnection.select().from(mementos).where(eq(mementos.novelId, novelId));
+      return res.json(results);
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to fetch memos from SQL:", e);
+    }
+  }
+
   const results = mockDb.memos.filter((m) => m.novelId === novelId);
   res.json(results);
 });
@@ -638,12 +852,32 @@ app.post("/api/novels/:novelId/memos", requireAuth, async (req: any, res) => {
     return res.status(400).json({ error: "Title or content is required" });
   }
 
+  const dbConnection = getDb();
+  if (dbConnection && isValidUuid(novelId)) {
+    try {
+      console.log(`[API Debug] Saving memo for novel '${novelId}' in PG`);
+      const [inserted] = await dbConnection.insert(mementos).values({
+        novelId,
+        title: title || "無題のメモ",
+        content: content || "",
+        color: color || "#fffbeb",
+      }).returning();
+
+      if (inserted) {
+        console.log(`[API Debug] ✔ Memo '${inserted.id}' saved successfully`);
+        return res.json(inserted);
+      }
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to save memo in PG:", e);
+    }
+  }
+
   const newMemo = {
     id: `mem-${Date.now()}`,
     novelId,
     title: title || "無題のメモ",
     content: content || "",
-    color: color || "#fffbeb", // amber/yellow default
+    color: color || "#fffbeb",
     createdAt: new Date(),
   };
 
@@ -654,6 +888,25 @@ app.post("/api/novels/:novelId/memos", requireAuth, async (req: any, res) => {
 app.put("/api/novels/:novelId/memos/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
   const { title, content, color } = req.body;
+
+  const dbConnection = getDb();
+  if (dbConnection && isValidUuid(id)) {
+    try {
+      console.log(`[API Debug] Updating memo: '${id}'`);
+      const [updated] = await dbConnection.update(mementos).set({
+        title,
+        content: content || "",
+        color: color || "#fffbeb",
+      }).where(eq(mementos.id, id)).returning();
+
+      if (updated) {
+        console.log(`[API Debug] ✔ Memo '${id}' updated in PG`);
+        return res.json(updated);
+      }
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to update memo in DB:", e);
+    }
+  }
 
   const idx = mockDb.memos.findIndex((m) => m.id === id);
   if (idx !== -1) {
@@ -670,6 +923,16 @@ app.put("/api/novels/:novelId/memos/:id", requireAuth, async (req: any, res) => 
 
 app.delete("/api/novels/:novelId/memos/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
+  const dbConnection = getDb();
+  if (dbConnection && isValidUuid(id)) {
+    try {
+      console.log(`[API Debug] Deleting memo: '${id}'`);
+      await dbConnection.delete(mementos).where(eq(mementos.id, id));
+      return res.json({ success: true });
+    } catch (e) {
+      console.error("[API Debug] ❌ Failed to delete memo in DB:", e);
+    }
+  }
   mockDb.memos = mockDb.memos.filter((m) => m.id !== id);
   res.json({ success: true });
 });
@@ -713,4 +976,3 @@ async function start() {
 start().catch((err) => {
   console.error("[Server] Start failure:", err);
 });
-

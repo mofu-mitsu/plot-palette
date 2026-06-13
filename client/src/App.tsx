@@ -450,8 +450,40 @@ export default function App() {
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
         
         pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`${episode.title || "episode"}.pdf`);
-        toast.success("PDFのダウンロードが完了しました！");
+
+        // スマホなどで確実にダウンロード・共有させるためのBlob処理
+        const blob = pdf.output("blob");
+        const file = new File([blob], `${episode.title || "episode"}.pdf`, { type: "application/pdf" });
+        
+        // 端末がShare APIでPDFをサポートしているか検証し、可能ならShareを開く
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: episode.title || "無題の執筆",
+            });
+            toast.success("PDFの共有・保存が完了しました！");
+          } catch (shareErr) {
+            // キャンセルされたか失敗した場合は通常のダウンロードフォールバック
+            triggerDownload(blob, `${episode.title || "episode"}.pdf`);
+          }
+        } else {
+          // PCなどの場合は通常のダウンロード
+          triggerDownload(blob, `${episode.title || "episode"}.pdf`);
+        }
+        
+        function triggerDownload(b: Blob, filename: string) {
+          const blobUrl = URL.createObjectURL(b);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+          toast.success("PDFをダウンロードしました！");
+        }
+
       } catch (err) {
         console.error(err);
         toast.error("PDFの生成に失敗しました");
@@ -1414,24 +1446,24 @@ export default function App() {
       <Toaster position="top-center" />
       {/* --- ヘッダー (可愛らしくモダンなピンク＆パレット調、およびカスタムテーマ対応) --- */}
       <header 
-        className="backdrop-blur border-b sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm transition-all"
+        className="backdrop-blur border-b sticky top-0 z-40 px-3 md:px-6 py-2.5 md:py-4 flex items-center justify-between shadow-sm transition-all"
         style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-color)" }}
       >
         <div 
-          className="flex items-center gap-3 cursor-pointer"
+          className="flex items-center gap-2 md:gap-3 cursor-pointer"
           onClick={() => setSelectedNovel(null)}
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-pink-500 via-rose-400 to-amber-300 flex items-center justify-center text-white shadow-md shadow-pink-200/50">
-            <Palette className="w-5 h-5 animate-pulse" />
+          <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-tr from-pink-500 via-rose-400 to-amber-300 flex items-center justify-center text-white shadow-md shadow-pink-200/50 shrink-0">
+            <Palette className="w-4 h-4 md:w-5 md:h-5 animate-pulse" />
           </div>
-          <div>
+          <div className="flex flex-col justify-center">
             <h1 
-              className="text-lg font-sans font-extrabold tracking-wider bg-gradient-to-r from-pink-600 to-rose-500 bg-clip-text text-transparent flex items-center gap-1.5"
+              className="text-[14px] md:text-lg font-sans font-extrabold tracking-wider bg-gradient-to-r from-pink-600 to-rose-500 bg-clip-text text-transparent flex items-center gap-1.5"
               style={{ color: "transparent" }}
             >
-              Plot Palette <span className="text-[10px] bg-pink-500 text-white px-2 py-0.5 rounded-full font-bold shadow-sm">Studio</span>
+              Plot Palette <span className="text-[9px] md:text-[10px] bg-pink-500 text-white px-1.5 md:px-2 py-0 md:py-0.5 rounded-full font-bold shadow-sm">Studio</span>
             </h1>
-            <p className="text-[9px] text-pink-400 font-semibold tracking-wider uppercase">Creative Story Generator</p>
+            <p className="text-[7px] md:text-[9px] text-pink-400 font-semibold tracking-wider uppercase leading-tight md:leading-normal">Creative Story Generator</p>
           </div>
         </div>
 
@@ -1784,12 +1816,22 @@ export default function App() {
                 <Search className="w-4 h-4 text-pink-500 shrink-0" />
                 <span>情報を全文検索🔍</span>
               </button>
+
+              <div className="border-t border-slate-100 my-1 pt-1"></div>
+
+              <button
+                type="button"
+                onClick={() => { handleLogout(); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition text-left"
+              >
+                ログアウト
+              </button>
             </div>
           )}
 
           <button
             onClick={handleLogout}
-            className="text-xs bg-white hover:bg-slate-50 text-slate-800 px-4 py-2 rounded-full font-bold transition border border-slate-200 shadow-sm flex items-center gap-1.5"
+            className="hidden sm:flex text-xs bg-white hover:bg-slate-50 text-slate-800 px-4 py-2 rounded-full font-bold transition border border-slate-200 shadow-sm items-center gap-1.5"
           >
             ログアウト
           </button>
@@ -3507,7 +3549,7 @@ export default function App() {
 
               <div>
                 <label className="block text-[11px] font-bold text-amber-900/60 uppercase tracking-widest mb-1.5">
-                  テーマ・結末などの構想 (Nora機能)
+                  テーマ・結末などの構想
                 </label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                   <input
