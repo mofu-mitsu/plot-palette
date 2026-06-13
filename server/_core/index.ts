@@ -4,7 +4,7 @@ import { setupVite, serveStatic } from "./vite";
 import { registerOAuthRoutes } from "./oauth";
 import { sdk } from "./sdk";
 import { COOKIE_NAME } from "../../shared/const";
-import { getDb, initLogs } from "../db";
+import { getDb, initLogs, ensureTablesInitialized } from "../db";
 import { users, novels, plots, characters, episodes, settings, mementos } from "../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -55,6 +55,18 @@ app.get("/api/debug/db-status", (req: any, res) => {
     maskedDirectUrl,
     logs: initLogs,
   });
+});
+
+// Ensure Database schema is fully ready before routing any API requests
+app.use(async (req: any, res, next) => {
+  if (req.path.startsWith("/api") && req.path !== "/api/debug/db-status") {
+    try {
+      await ensureTablesInitialized();
+    } catch (e: any) {
+      console.error("[DB Middleware] ❌ Database schema alignment error:", e.message || e);
+    }
+  }
+  next();
 });
 
 // Authentication Middleware to resolve active session
