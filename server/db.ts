@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { users, novels, plots, characters, episodes, settings, mementos } from "../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
+export let initLogs: string[] = [];
 let dbInstance: any = null;
 let isInitializing = false;
 let initialized = false;
@@ -11,11 +12,27 @@ let initialized = false;
 async function initializeTables(sqlClient: any) {
   if (initialized || isInitializing) return;
   isInitializing = true;
+  initLogs.push(`[${new Date().toISOString()}] Starting Supabase database auto-initialization...`);
   console.log("[DB Debug] Starting Supabase database auto-initialization...");
 
+  // Helper inside to execute query with isolation
+  const runQuery = async (name: string, pfn: () => Promise<any>) => {
+    try {
+      await pfn();
+      console.log(`[DB Debug] ✔ '${name}' step processed successfully.`);
+      initLogs.push(`[${new Date().toISOString()}] ✔ '${name}' checked successfully.`);
+    } catch (err: any) {
+      console.error(`[DB Debug] ❌ '${name}' step failed:`, err.message || err);
+      initLogs.push(`[${new Date().toISOString()}] ❌ '${name}' failed: ${err.message || err}`);
+    }
+  };
+
   try {
+    // 0. Enable pgcrypto for gen_random_uuid()
+    await runQuery("pgcrypto extension", () => sqlClient`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
+
     // 1. users table
-    await sqlClient`
+    await runQuery("users table", () => sqlClient`
       CREATE TABLE IF NOT EXISTS users (
         open_id TEXT PRIMARY KEY,
         name TEXT,
@@ -24,11 +41,10 @@ async function initializeTables(sqlClient: any) {
         last_signed_in TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW()
       );
-    `;
-    console.log("[DB Debug] ✔ 'users' table checked/created.");
+    `);
 
     // 2. novels table
-    await sqlClient`
+    await runQuery("novels table", () => sqlClient`
       CREATE TABLE IF NOT EXISTS novels (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id TEXT REFERENCES users(open_id) ON DELETE CASCADE,
@@ -46,11 +62,10 @@ async function initializeTables(sqlClient: any) {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
-    `;
-    console.log("[DB Debug] ✔ 'novels' table checked/created.");
+    `);
 
     // 3. plots table
-    await sqlClient`
+    await runQuery("plots table", () => sqlClient`
       CREATE TABLE IF NOT EXISTS plots (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
@@ -61,11 +76,10 @@ async function initializeTables(sqlClient: any) {
         timeline_date TEXT,
         created_at TIMESTAMP DEFAULT NOW()
       );
-    `;
-    console.log("[DB Debug] ✔ 'plots' table checked/created.");
+    `);
 
     // 4. characters table
-    await sqlClient`
+    await runQuery("characters table", () => sqlClient`
       CREATE TABLE IF NOT EXISTS characters (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
@@ -80,11 +94,10 @@ async function initializeTables(sqlClient: any) {
         custom_fields JSONB DEFAULT '[]'::jsonb,
         created_at TIMESTAMP DEFAULT NOW()
       );
-    `;
-    console.log("[DB Debug] ✔ 'characters' table checked/created.");
+    `);
 
     // 5. episodes table
-    await sqlClient`
+    await runQuery("episodes table", () => sqlClient`
       CREATE TABLE IF NOT EXISTS episodes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
@@ -95,11 +108,10 @@ async function initializeTables(sqlClient: any) {
         word_count INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT NOW()
       );
-    `;
-    console.log("[DB Debug] ✔ 'episodes' table checked/created.");
+    `);
 
     // 6. settings table
-    await sqlClient`
+    await runQuery("settings table", () => sqlClient`
       CREATE TABLE IF NOT EXISTS settings (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
@@ -110,11 +122,10 @@ async function initializeTables(sqlClient: any) {
         fusen_status TEXT DEFAULT '未回収',
         created_at TIMESTAMP DEFAULT NOW()
       );
-    `;
-    console.log("[DB Debug] ✔ 'settings' table checked/created.");
+    `);
 
     // 7. memos (mementos) table
-    await sqlClient`
+    await runQuery("memos table", () => sqlClient`
       CREATE TABLE IF NOT EXISTS memos (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
@@ -123,13 +134,14 @@ async function initializeTables(sqlClient: any) {
         color TEXT DEFAULT '#fffbeb',
         created_at TIMESTAMP DEFAULT NOW()
       );
-    `;
-    console.log("[DB Debug] ✔ 'memos' table checked/created.");
+    `);
 
     initialized = true;
     console.log("[DB Debug] 🎉 All database tables checked and verified successfully with Supabase Postgres!");
-  } catch (error) {
-    console.error("[DB Debug] ❌ Database auto-initialization failed:", error);
+    initLogs.push(`[${new Date().toISOString()}] 🎉 All database tables checked and verified successfully with Supabase Postgres!`);
+  } catch (outerError: any) {
+    console.error("[DB Debug] ❌ Outer database auto-initialization failed:", outerError);
+    initLogs.push(`[${new Date().toISOString()}] ❌ Outer failed: ${outerError.message || outerError}`);
   } finally {
     isInitializing = false;
   }
@@ -140,19 +152,23 @@ export function getDb() {
     const url = process.env.DATABASE_URL;
     if (!url) {
       console.warn("[DB Debug] DATABASE_URL is not set. Database commands will fallback to static/in-memory modes.");
+      initLogs.push(`[${new Date().toISOString()}] ⚠ DATABASE_URL is not set! Fallback mode is active.`);
       return null;
     }
     try {
       console.log("[DB Debug] DATABASE_URL detected. Connecting via postgres-js client...");
+      initLogs.push(`[${new Date().toISOString()}] Connecting to database (length: ${url.length})...`);
       const queryClient = postgres(url, { ssl: "require" });
       dbInstance = drizzle(queryClient);
       
       // Fire-and-forget the tables initialization asynchronously
       initializeTables(queryClient).catch((err) => {
         console.error("[DB Debug] Asynchronous table creation error:", err);
+        initLogs.push(`[${new Date().toISOString()}] Async error: ${err.message || err}`);
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error("[DB Debug] Connection establishment failed:", e);
+      initLogs.push(`[${new Date().toISOString()}] Connection setup error: ${e.message || e}`);
       return null;
     }
   }

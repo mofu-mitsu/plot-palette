@@ -4,7 +4,7 @@ import { setupVite, serveStatic } from "./vite";
 import { registerOAuthRoutes } from "./oauth";
 import { sdk } from "./sdk";
 import { COOKIE_NAME } from "../../shared/const";
-import { getDb } from "../db";
+import { getDb, initLogs } from "../db";
 import { users, novels, plots, characters, episodes, settings, mementos } from "../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -34,6 +34,28 @@ app.use((req: any, res, next) => {
 
 // Auth Route Handlers
 registerOAuthRoutes(app);
+
+// DB Status Debug Route
+app.get("/api/debug/db-status", (req: any, res) => {
+  const dbUrl = process.env.DATABASE_URL;
+  const directUrl = process.env.DATABASE_DIRECT_URL;
+  let maskedUrl = "Not defined";
+  let maskedDirectUrl = "Not defined";
+  if (dbUrl) {
+    maskedUrl = dbUrl.substring(0, Math.min(15, dbUrl.length)) + "..." + dbUrl.substring(Math.max(0, dbUrl.length - 15));
+  }
+  if (directUrl) {
+    maskedDirectUrl = directUrl.substring(0, Math.min(15, directUrl.length)) + "..." + directUrl.substring(Math.max(0, directUrl.length - 15));
+  }
+  res.json({
+    status: "ok",
+    hasDatabaseUrl: !!dbUrl,
+    hasDirectUrl: !!directUrl,
+    maskedUrl,
+    maskedDirectUrl,
+    logs: initLogs,
+  });
+});
 
 // Authentication Middleware to resolve active session
 app.use(async (req: any, res, next) => {
@@ -178,8 +200,9 @@ app.get("/api/novels", requireAuth, async (req: any, res) => {
       console.log(`[API Debug] Fetching novels from Supabase for user '${openId}'`);
       const results = await dbConnection.select().from(novels).where(eq(novels.userId, openId));
       return res.json(results);
-    } catch (e) {
-      console.error("[API Debug] ❌ Failed to fetch novels from PG, using in-memory mock fallback:", e);
+    } catch (e: any) {
+      console.error("[API Debug] ❌ Failed to fetch novels from PG:", e);
+      return res.status(500).json({ error: "Database fetch failed", message: e.message || e });
     }
   }
 
@@ -222,8 +245,9 @@ app.post("/api/novels", requireAuth, async (req: any, res) => {
         console.log(`[API Debug] ✔ Successfully created novel '${inserted.id}'`);
         return res.json(inserted);
       }
-    } catch (e) {
-      console.error("[API Debug] ❌ Failed to save novel in SQL database, fallback to mock memory:", e);
+    } catch (e: any) {
+      console.error("[API Debug] ❌ Failed to save novel in SQL database:", e);
+      return res.status(500).json({ error: "Database save failed", message: e.message || e });
     }
   }
 
@@ -258,7 +282,10 @@ app.put("/api/novels/:id", requireAuth, async (req: any, res) => {
   } = req.body;
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid novel ID format for saving in cloud database" });
+    }
     try {
       console.log(`[API Debug] Updating novel in Supabase: '${id}'`);
       const [updated] = await dbConnection.update(novels).set({
@@ -280,8 +307,9 @@ app.put("/api/novels/:id", requireAuth, async (req: any, res) => {
         console.log(`[API Debug] ✔ Novel '${id}' updated successfully in PG`);
         return res.json(updated);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(`[API Debug] ❌ Failed to update Supabase novel for '${id}':`, e);
+      return res.status(500).json({ error: "Database update failed", message: e.message || e });
     }
   }
 
@@ -312,14 +340,18 @@ app.delete("/api/novels/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
   const dbConnection = getDb();
 
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid novel ID format for deletion from database" });
+    }
     try {
       console.log(`[API Debug] Deleting novel '${id}' and cascades from Supabase`);
       await dbConnection.delete(novels).where(eq(novels.id, id));
       console.log(`[API Debug] ✔ Novel and cascades successfully deleted in DB`);
       return res.json({ success: true });
-    } catch (e) {
+    } catch (e: any) {
       console.error(`[API Debug] ❌ Supabase novel deletion failed for '${id}':`, e);
+      return res.status(500).json({ error: "Database deletion failed", message: e.message || e });
     }
   }
 
@@ -338,13 +370,17 @@ app.get("/api/novels/:novelId/plots", requireAuth, async (req: any, res) => {
   const { novelId } = req.params;
   const dbConnection = getDb();
 
-  if (dbConnection && isValidUuid(novelId)) {
+  if (dbConnection) {
+    if (!isValidUuid(novelId)) {
+      return res.status(400).json({ error: "Invalid novel ID format for routing to cloud database plots" });
+    }
     try {
       console.log(`[API Debug] Fetching plots from Supabase or world state for novel '${novelId}'`);
       const results = await dbConnection.select().from(plots).where(eq(plots.novelId, novelId));
       return res.json(results);
-    } catch (e) {
-      console.error("[API Debug] ❌ Failed to fetch plots from Database, using fallback:", e);
+    } catch (e: any) {
+      console.error("[API Debug] ❌ Failed to fetch plots from Database:", e);
+      return res.status(500).json({ error: "Database fetch failed", message: e.message || e });
     }
   }
 
@@ -361,7 +397,10 @@ app.post("/api/novels/:novelId/plots", requireAuth, async (req: any, res) => {
   }
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(novelId)) {
+  if (dbConnection) {
+    if (!isValidUuid(novelId)) {
+      return res.status(400).json({ error: "Invalid novel ID format for saving plots to database" });
+    }
     try {
       console.log(`[API Debug] Saving plot into PG for novel ID: '${novelId}'`);
       const [inserted] = await dbConnection.insert(plots).values({
@@ -377,8 +416,9 @@ app.post("/api/novels/:novelId/plots", requireAuth, async (req: any, res) => {
         console.log(`[API Debug] ✔ Plot '${inserted.id}' saved in Supabase`);
         return res.json(inserted);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to create plot in DB:", e);
+      return res.status(500).json({ error: "Database save failed", message: e.message || e });
     }
   }
 
@@ -402,7 +442,10 @@ app.put("/api/novels/:novelId/plots/:id", requireAuth, async (req: any, res) => 
   const { title, content, phase, timelineDate } = req.body;
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid plot ID format for update in database" });
+    }
     try {
       console.log(`[API Debug] Updating plot: '${id}'`);
       const [updated] = await dbConnection.update(plots).set({ 
@@ -416,8 +459,9 @@ app.put("/api/novels/:novelId/plots/:id", requireAuth, async (req: any, res) => 
         console.log(`[API Debug] ✔ Plot '${id}' updated in PG`);
         return res.json(updated);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to update plot in DB:", e);
+      return res.status(500).json({ error: "Database update failed", message: e.message || e });
     }
   }
 
@@ -438,13 +482,17 @@ app.put("/api/novels/:novelId/plots/:id", requireAuth, async (req: any, res) => 
 app.delete("/api/novels/:novelId/plots/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid plot ID format for deleting from database" });
+    }
     try {
       console.log(`[API Debug] Deleting plot '${id}'`);
       await dbConnection.delete(plots).where(eq(plots.id, id));
       return res.json({ success: true });
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to delete plot in DB:", e);
+      return res.status(500).json({ error: "Database deletion failed", message: e.message || e });
     }
   }
   mockDb.plots = mockDb.plots.filter(p => p.id !== id);
@@ -456,13 +504,17 @@ app.get("/api/novels/:novelId/characters", requireAuth, async (req: any, res) =>
   const { novelId } = req.params;
   const dbConnection = getDb();
 
-  if (dbConnection && isValidUuid(novelId)) {
+  if (dbConnection) {
+    if (!isValidUuid(novelId)) {
+      return res.status(400).json({ error: "Invalid novel ID format for fetching characters from database" });
+    }
     try {
       console.log(`[API Debug] Fetching characters for novel '${novelId}' from PG`);
       const results = await dbConnection.select().from(characters).where(eq(characters.novelId, novelId));
       return res.json(results);
-    } catch (e) {
-      console.error("[API Debug] ❌ Failed to fetch characters from DB, falling back:", e);
+    } catch (e: any) {
+      console.error("[API Debug] ❌ Failed to fetch characters from DB:", e);
+      return res.status(500).json({ error: "Database fetch failed", message: e.message || e });
     }
   }
 
@@ -479,7 +531,10 @@ app.post("/api/novels/:novelId/characters", requireAuth, async (req: any, res) =
   }
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(novelId)) {
+  if (dbConnection) {
+    if (!isValidUuid(novelId)) {
+      return res.status(400).json({ error: "Invalid novel ID format for creating character in database" });
+    }
     try {
       console.log(`[API Debug] Inserting character for novel: '${novelId}' into PG`);
       const [inserted] = await dbConnection.insert(characters).values({
@@ -499,8 +554,9 @@ app.post("/api/novels/:novelId/characters", requireAuth, async (req: any, res) =
         console.log(`[API Debug] ✔ Character '${inserted.id}' inserted into PG`);
         return res.json(inserted);
       }
-    } catch (e) {
-      console.error("[API Debug] ❌ Failed to insert character in DB, falling back:", e);
+    } catch (e: any) {
+      console.error("[API Debug] ❌ Failed to insert character in DB:", e);
+      return res.status(500).json({ error: "Database save failed", message: e.message || e });
     }
   }
 
@@ -527,7 +583,10 @@ app.put("/api/novels/:novelId/characters/:id", requireAuth, async (req: any, res
   const { name, role, description, age, appearance, personality, relationInfo, imageUrl, customFields } = req.body;
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid character ID format for database update" });
+    }
     try {
       console.log(`[API Debug] Updating character: '${id}'`);
       const [updated] = await dbConnection.update(characters).set({
@@ -546,8 +605,9 @@ app.put("/api/novels/:novelId/characters/:id", requireAuth, async (req: any, res
         console.log(`[API Debug] ✔ Character '${id}' updated successfully`);
         return res.json(updated);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to update character in DB:", e);
+      return res.status(500).json({ error: "Database update failed", message: e.message || e });
     }
   }
 
@@ -573,13 +633,17 @@ app.put("/api/novels/:novelId/characters/:id", requireAuth, async (req: any, res
 app.delete("/api/novels/:novelId/characters/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid character ID format for database deletion" });
+    }
     try {
       console.log(`[API Debug] Deleting character '${id}' from PG`);
       await dbConnection.delete(characters).where(eq(characters.id, id));
       return res.json({ success: true });
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to delete character in DB:", e);
+      return res.status(500).json({ error: "Database deletion failed", message: e.message || e });
     }
   }
   mockDb.characters = mockDb.characters.filter(c => c.id !== id);
@@ -591,13 +655,17 @@ app.get("/api/novels/:novelId/episodes", requireAuth, async (req: any, res) => {
   const { novelId } = req.params;
   const dbConnection = getDb();
 
-  if (dbConnection && isValidUuid(novelId)) {
+  if (dbConnection) {
+    if (!isValidUuid(novelId)) {
+      return res.status(400).json({ error: "Invalid novel ID format for fetching episodes from database" });
+    }
     try {
       console.log(`[API Debug] Fetching episodes for novel '${novelId}' from PG`);
       const results = await dbConnection.select().from(episodes).where(eq(episodes.novelId, novelId));
       return res.json(results);
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to fetch episodes from SQL database:", e);
+      return res.status(500).json({ error: "Database fetch failed", message: e.message || e });
     }
   }
 
@@ -614,7 +682,10 @@ app.post("/api/novels/:novelId/episodes", requireAuth, async (req: any, res) => 
   }
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(novelId)) {
+  if (dbConnection) {
+    if (!isValidUuid(novelId)) {
+      return res.status(400).json({ error: "Invalid novel ID format for saving episode to database" });
+    }
     try {
       console.log(`[API Debug] Inserting episode for novel '${novelId}' into PG`);
       const [inserted] = await dbConnection.insert(episodes).values({
@@ -630,8 +701,9 @@ app.post("/api/novels/:novelId/episodes", requireAuth, async (req: any, res) => 
         console.log(`[API Debug] ✔ Episode '${inserted.id}' saved in Supabase`);
         return res.json(inserted);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to save episode in SQL database:", e);
+      return res.status(500).json({ error: "Database save failed", message: e.message || e });
     }
   }
 
@@ -655,7 +727,10 @@ app.put("/api/novels/:novelId/episodes/:id", requireAuth, async (req: any, res) 
   const { title, body, status, tag, wordCount } = req.body;
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid episode ID format for database update" });
+    }
     try {
       console.log(`[API Debug] Updating episode: '${id}'`);
       const [updated] = await dbConnection.update(episodes).set({
@@ -670,8 +745,9 @@ app.put("/api/novels/:novelId/episodes/:id", requireAuth, async (req: any, res) 
         console.log(`[API Debug] ✔ Episode '${id}' updated in PG`);
         return res.json(updated);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to update episode in DB:", e);
+      return res.status(500).json({ error: "Database update failed", message: e.message || e });
     }
   }
 
@@ -693,13 +769,17 @@ app.put("/api/novels/:novelId/episodes/:id", requireAuth, async (req: any, res) 
 app.delete("/api/novels/:novelId/episodes/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid episode ID format for database deletion" });
+    }
     try {
       console.log(`[API Debug] Deleting episode: '${id}'`);
       await dbConnection.delete(episodes).where(eq(episodes.id, id));
       return res.json({ success: true });
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to delete episode in DB:", e);
+      return res.status(500).json({ error: "Database deletion failed", message: e.message || e });
     }
   }
   mockDb.episodes = mockDb.episodes.filter((e) => e.id !== id);
@@ -711,13 +791,17 @@ app.get("/api/novels/:novelId/settings", requireAuth, async (req: any, res) => {
   const { novelId } = req.params;
   const dbConnection = getDb();
 
-  if (dbConnection && isValidUuid(novelId)) {
+  if (dbConnection) {
+    if (!isValidUuid(novelId)) {
+      return res.status(400).json({ error: "Invalid novel ID format for fetching settings" });
+    }
     try {
       console.log(`[API Debug] Fetching settings for novel '${novelId}' from PG`);
       const results = await dbConnection.select().from(settings).where(eq(settings.novelId, novelId));
       return res.json(results);
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to fetch settings from PG:", e);
+      return res.status(500).json({ error: "Database fetch failed", message: e.message || e });
     }
   }
 
@@ -734,7 +818,10 @@ app.post("/api/novels/:novelId/settings", requireAuth, async (req: any, res) => 
   }
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(novelId)) {
+  if (dbConnection) {
+    if (!isValidUuid(novelId)) {
+      return res.status(400).json({ error: "Invalid novel ID format for saving settings" });
+    }
     try {
       console.log(`[API Debug] Saving setting for novel '${novelId}' in PG`);
       const [inserted] = await dbConnection.insert(settings).values({
@@ -750,8 +837,9 @@ app.post("/api/novels/:novelId/settings", requireAuth, async (req: any, res) => 
         console.log(`[API Debug] ✔ Setting '${inserted.id}' saved successfully`);
         return res.json(inserted);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to save setting in PG:", e);
+      return res.status(500).json({ error: "Database save failed", message: e.message || e });
     }
   }
 
@@ -774,7 +862,10 @@ app.put("/api/novels/:novelId/settings/:id", requireAuth, async (req: any, res) 
   const { title, category, detail, isFusen, fusenStatus } = req.body;
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid setting ID format for database update" });
+    }
     try {
       console.log(`[API Debug] Updating setting: '${id}'`);
       const [updated] = await dbConnection.update(settings).set({
@@ -789,8 +880,9 @@ app.put("/api/novels/:novelId/settings/:id", requireAuth, async (req: any, res) 
         console.log(`[API Debug] ✔ Setting '${id}' updated in PG`);
         return res.json(updated);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to update setting in DB:", e);
+      return res.status(500).json({ error: "Database update failed", message: e.message || e });
     }
   }
 
@@ -812,13 +904,17 @@ app.put("/api/novels/:novelId/settings/:id", requireAuth, async (req: any, res) 
 app.delete("/api/novels/:novelId/settings/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid setting ID format for deletion" });
+    }
     try {
       console.log(`[API Debug] Deleting setting: '${id}'`);
       await dbConnection.delete(settings).where(eq(settings.id, id));
       return res.json({ success: true });
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to delete setting from DB:", e);
+      return res.status(500).json({ error: "Database deletion failed", message: e.message || e });
     }
   }
   mockDb.settings = mockDb.settings.filter((s) => s.id !== id);
@@ -830,13 +926,17 @@ app.get("/api/novels/:novelId/memos", requireAuth, async (req: any, res) => {
   const { novelId } = req.params;
   const dbConnection = getDb();
 
-  if (dbConnection && isValidUuid(novelId)) {
+  if (dbConnection) {
+    if (!isValidUuid(novelId)) {
+      return res.status(400).json({ error: "Invalid novel ID format for fetching memos" });
+    }
     try {
       console.log(`[API Debug] Fetching memos for novel '${novelId}' from PG`);
       const results = await dbConnection.select().from(mementos).where(eq(mementos.novelId, novelId));
       return res.json(results);
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to fetch memos from SQL:", e);
+      return res.status(500).json({ error: "Database fetch failed", message: e.message || e });
     }
   }
 
@@ -853,7 +953,10 @@ app.post("/api/novels/:novelId/memos", requireAuth, async (req: any, res) => {
   }
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(novelId)) {
+  if (dbConnection) {
+    if (!isValidUuid(novelId)) {
+      return res.status(400).json({ error: "Invalid novel ID format for saving memos" });
+    }
     try {
       console.log(`[API Debug] Saving memo for novel '${novelId}' in PG`);
       const [inserted] = await dbConnection.insert(mementos).values({
@@ -867,8 +970,9 @@ app.post("/api/novels/:novelId/memos", requireAuth, async (req: any, res) => {
         console.log(`[API Debug] ✔ Memo '${inserted.id}' saved successfully`);
         return res.json(inserted);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to save memo in PG:", e);
+      return res.status(500).json({ error: "Database save failed", message: e.message || e });
     }
   }
 
@@ -890,7 +994,10 @@ app.put("/api/novels/:novelId/memos/:id", requireAuth, async (req: any, res) => 
   const { title, content, color } = req.body;
 
   const dbConnection = getDb();
-  if (dbConnection && isValidUuid(id)) {
+  if (dbConnection) {
+    if (!isValidUuid(id)) {
+      return res.status(400).json({ error: "Invalid memo ID format for database update" });
+    }
     try {
       console.log(`[API Debug] Updating memo: '${id}'`);
       const [updated] = await dbConnection.update(mementos).set({
@@ -903,8 +1010,9 @@ app.put("/api/novels/:novelId/memos/:id", requireAuth, async (req: any, res) => 
         console.log(`[API Debug] ✔ Memo '${id}' updated in PG`);
         return res.json(updated);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[API Debug] ❌ Failed to update memo in DB:", e);
+      return res.status(500).json({ error: "Database update failed", message: e.message || e });
     }
   }
 

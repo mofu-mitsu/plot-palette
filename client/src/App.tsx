@@ -42,7 +42,8 @@ import {
   Crown,
   ChevronRight,
   Menu,
-  Share2
+  Share2,
+  CloudLightning
 } from "lucide-react";
 import { 
   Novel, 
@@ -185,6 +186,28 @@ export default function App() {
   // Mobile Hamburger Toggle
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
+  // Cloud Sync & DB Debug Modals
+  const [showDbStatusModal, setShowDbStatusModal] = useState(false);
+  const [dbStatusData, setDbStatusData] = useState<any>(null);
+  const [isCheckingDb, setIsCheckingDb] = useState(false);
+
+  const checkDbStatus = async () => {
+    setIsCheckingDb(true);
+    try {
+      const res = await fetch("/api/debug/db-status");
+      if (res.ok) {
+        const data = await res.json();
+        setDbStatusData(data);
+      } else {
+        setDbStatusData({ error: `HTTP ${res.status}: エラーが発生しました。` });
+      }
+    } catch (err: any) {
+      setDbStatusData({ error: err.message || "ネットワーク接続失敗" });
+    } finally {
+      setIsCheckingDb(false);
+    }
+  };
+
   // Print / PDF States
   const [isPrintingMode, setIsPrintingMode] = useState(false);
   const [printingEpisode, setPrintingEpisode] = useState<Episode | null>(null);
@@ -316,29 +339,166 @@ export default function App() {
     }
   };
 
-  // Fetch novels on user session resolution
+  // Fetch novels on user session resolution & Auto Sync Offline Data
   useEffect(() => {
     if (user) {
       setSyncStatus("saving");
       fetch("/api/novels")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && data.length > 0) {
-            setNovels(data);
-            setSyncStatus("synced");
-          } else {
-            // Check backup
-            const backup = loadBackupData();
-            if (backup && backup.novels) {
-              setNovels(backup.novels);
+        .then((res) => {
+          if (!res.ok) throw new Error("Server error " + res.status);
+          return res.json();
+        })
+        .then(async (dbNovels: any[]) => {
+          const backupStr = localStorage.getItem("plot_palette_backup_v2");
+          let localBackup: any = null;
+          if (backupStr) {
+            try {
+              localBackup = JSON.parse(backupStr);
+            } catch (e) {
+              console.error("Backup syntax err", e);
             }
-            setSyncStatus("synced");
           }
+
+          if (localBackup && localBackup.novels && localBackup.novels.length > 0) {
+            const syncedNovels = [...dbNovels];
+            let hasNewMerge = false;
+
+            for (const localN of localBackup.novels) {
+              const alreadyInCloud = dbNovels.some((dn) => dn.id === localN.id || dn.title === localN.title);
+              if (!alreadyInCloud) {
+                hasNewMerge = true;
+                console.log(`[Master Sync] Auto migrating local novel to cloud: "${localN.title}"`);
+                try {
+                  const nRes = await fetch("/api/novels", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      title: localN.title,
+                      description: localN.description,
+                      coverImage: localN.coverImage,
+                      themeDoc: localN.themeDoc,
+                      targetAudience: localN.targetAudience,
+                      endingDoc: localN.endingDoc,
+                      wordGoal: localN.wordGoal,
+                      writeDays: localN.writeDays,
+                      chartImage: localN.chartImage,
+                      chartMemo: localN.chartMemo,
+                    })
+                  });
+
+                  if (nRes.ok) {
+                    const savedCloudN = await nRes.json();
+                    const newCloudId = savedCloudN.id;
+                    const oldLocalId = localN.id;
+
+                    syncedNovels.push(savedCloudN);
+
+                    // Sync sub-collections
+                    // 1. Plots
+                    const localPlots = (localBackup.plots || []).filter((p: any) => p.novelId === oldLocalId);
+                    for (const lp of localPlots) {
+                      await fetch(`/api/novels/${newCloudId}/plots`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          title: lp.title,
+                          content: lp.content,
+                          phase: lp.phase,
+                          timelineDate: lp.timelineDate,
+                        })
+                      }).catch(e => console.error("Plot migrate err", e));
+                    }
+
+                    // 2. Characters
+                    const localChars = (localBackup.characters || []).filter((c: any) => c.novelId === oldLocalId);
+                    for (const lc of localChars) {
+                      await fetch(`/api/novels/${newCloudId}/characters`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          name: lc.name,
+                          role: lc.role,
+                          description: lc.description,
+                          age: lc.age,
+                          appearance: lc.appearance,
+                          personality: lc.personality,
+                          relationInfo: lc.relationInfo,
+                          imageUrl: lc.imageUrl,
+                          customFields: lc.customFields,
+                        })
+                      }).catch(e => console.error("Char migrate err", e));
+                    }
+
+                    // 3. Settings
+                    const localSettings = (localBackup.worldSettings || []).filter((s: any) => s.novelId === oldLocalId);
+                    for (const ls of localSettings) {
+                      await fetch(`/api/novels/${newCloudId}/settings`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          title: ls.title,
+                          category: ls.category,
+                          detail: ls.detail,
+                          isFusen: ls.isFusen,
+                          fusenStatus: ls.fusenStatus,
+                        })
+                      }).catch(e => console.error("Setting migrate err", e));
+                    }
+
+                    // 4. Memos
+                    const localMemos = (localBackup.memos || []).filter((m: any) => m.novelId === oldLocalId);
+                    for (const lm of localMemos) {
+                      await fetch(`/api/novels/${newCloudId}/memos`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          title: lm.title,
+                          content: lm.content,
+                          color: lm.color,
+                        })
+                      }).catch(e => console.error("Memo migrate err", e));
+                    }
+
+                    // 5. Episodes
+                    const localEpisodes = (localBackup.episodes || []).filter((ep: any) => ep.novelId === oldLocalId);
+                    for (const lep of localEpisodes) {
+                      await fetch(`/api/novels/${newCloudId}/episodes`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          title: lep.title,
+                          body: lep.body,
+                          status: lep.status,
+                          tag: lep.tag,
+                          wordCount: lep.wordCount,
+                        })
+                      }).catch(e => console.error("Episode migrate err", e));
+                    }
+
+                    console.log(`[Master Sync] Successfully processed and uploaded "${localN.title}"!`);
+                  }
+                } catch (e) {
+                  console.error("Migration fatal err ", e);
+                }
+              }
+            }
+
+            if (hasNewMerge) {
+              setNovels(syncedNovels);
+              toast.success("オフラインで作成された未同期プロジェクトが自動移行・マージされました 📡✨");
+            } else {
+              setNovels(dbNovels);
+            }
+          } else {
+            setNovels(dbNovels);
+          }
+          setSyncStatus("synced");
         })
         .catch((err) => {
           console.error("Failed to load novels, loading offline backup", err);
           loadBackupData();
           setSyncStatus("offline");
+          toast.error("サーバーとの通信に失敗しました。オフラインモードで安全に起動しました 🔒");
         });
     }
   }, [user]);
@@ -451,28 +611,7 @@ export default function App() {
         
         pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
 
-        // スマホなどで確実にダウンロード・共有させるためのBlob処理
-        const blob = pdf.output("blob");
-        const file = new File([blob], `${episode.title || "episode"}.pdf`, { type: "application/pdf" });
-        
-        // 端末がShare APIでPDFをサポートしているか検証し、可能ならShareを開く
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: episode.title || "無題の執筆",
-            });
-            toast.success("PDFの共有・保存が完了しました！");
-          } catch (shareErr) {
-            // キャンセルされたか失敗した場合は通常のダウンロードフォールバック
-            triggerDownload(blob, `${episode.title || "episode"}.pdf`);
-          }
-        } else {
-          // PCなどの場合は通常のダウンロード
-          triggerDownload(blob, `${episode.title || "episode"}.pdf`);
-        }
-        
-        function triggerDownload(b: Blob, filename: string) {
+        const triggerDownload = (b: Blob, filename: string) => {
           const blobUrl = URL.createObjectURL(b);
           const link = document.createElement("a");
           link.href = blobUrl;
@@ -482,6 +621,54 @@ export default function App() {
           document.body.removeChild(link);
           setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
           toast.success("PDFをダウンロードしました！");
+        };
+
+        // スマホなどで確実にダウンロード・共有させるためのBlob処理
+        const blob = pdf.output("blob");
+        const file = new File([blob], `${episode.title || "episode"}.pdf`, { type: "application/pdf" });
+        
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+        if (isMobile) {
+          try {
+            const pdfDataUri = pdf.output("datauristring");
+            const newWindow = window.open();
+            if (newWindow) {
+              newWindow.document.write(`
+                <html>
+                  <head>
+                    <title>${episode.title || "PDF プレビュー"}</title>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                      html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background-color:#333; }
+                      iframe { border:none; width:100%; height:100%; }
+                    </style>
+                  </head>
+                  <body>
+                    <iframe src="${pdfDataUri}"></iframe>
+                  </body>
+                </html>
+              `);
+              newWindow.document.close();
+              toast.success("PDFを表示しました。右上の共有/保存メニューをご利用ください 📂✨");
+            } else {
+              triggerDownload(blob, `${episode.title || "episode"}.pdf`);
+            }
+          } catch (e) {
+            triggerDownload(blob, `${episode.title || "episode"}.pdf`);
+          }
+        } else if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: episode.title || "無題の執筆",
+            });
+            toast.success("PDFの共有・保存が完了しました！");
+          } catch (shareErr) {
+            triggerDownload(blob, `${episode.title || "episode"}.pdf`);
+          }
+        } else {
+          triggerDownload(blob, `${episode.title || "episode"}.pdf`);
         }
 
       } catch (err) {
@@ -1677,14 +1864,18 @@ export default function App() {
             <span className="text-xs font-semibold" style={{ color: "var(--text-main)" }}>
               <strong className="text-pink-600 font-extrabold">{displayName}</strong> さん
             </span>
-            <div className="flex items-center gap-1 justify-end mt-0.5">
+            <button
+              onClick={() => { setShowDbStatusModal(true); checkDbStatus(); }}
+              className="flex items-center gap-1 justify-end mt-0.5 hover:opacity-80 transition cursor-pointer text-left focus:outline-none"
+              title="クラウド同期診断を開く"
+            >
               <span className={`w-1.5 h-1.5 rounded-full ${
                 syncStatus === "synced" ? "bg-emerald-500 animate-pulse" : "bg-pink-400"
               }`} />
-              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
-                {syncStatus === "synced" ? "同期完了" : syncStatus === "saving" ? "同調中..." : "オフライン"}
+              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider underline decoration-dotted decoration-slate-300">
+                {syncStatus === "synced" ? "同期完了 (診断 📡)" : syncStatus === "saving" ? "同調中..." : "オフライン (診断 📡)"}
               </span>
-            </div>
+            </button>
           </div>
 
           {/* 全文検索ボタン */}
@@ -1788,6 +1979,15 @@ export default function App() {
               >
                 <Share2 className="w-4 h-4 text-pink-500 shrink-0" />
                 <span>アトリエをシェア📢</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowDbStatusModal(true); checkDbStatus(); setShowMobileMenu(false); }}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-violet-50 hover:text-violet-600 transition text-left"
+              >
+                <CloudLightning className="w-4 h-4 text-violet-500 shrink-0" />
+                <span>クラウド同期診断 📡</span>
               </button>
 
               <button
@@ -4545,6 +4745,115 @@ export default function App() {
                 style={{ backgroundColor: "var(--accent-color)" }}
               >
                 了解した ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- クラウド同期・接続診断モーダル --- */}
+      {showDbStatusModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200 text-slate-800" style={{ color: "#1f2937" }}>
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden text-left flex flex-col max-h-[85vh]">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-violet-50/50">
+              <span className="text-xs font-black text-violet-700 flex items-center gap-1.5 uppercase tracking-wide">
+                <CloudLightning className="w-4 h-4 animate-pulse shrink-0" /> アトリエ接続・同期診断 📡
+              </span>
+              <button 
+                onClick={() => setShowDbStatusModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 space-y-5 text-slate-700 leading-relaxed bg-white">
+              {/* 同期ステータス識別 */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500">アカウントログイン</span>
+                  <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
+                    user ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-amber-50 text-amber-600 border border-amber-100"
+                  }`}>
+                    {user ? "Googleログイン中" : "未ログイン (ローカル)"}
+                  </span>
+                </div>
+                {user && (
+                  <div className="flex items-center justify-between border-t border-slate-200/50 pt-2 text-[11px]">
+                    <span className="text-slate-400">ログインユーザー名</span>
+                    <span className="font-bold text-slate-600">{user.name}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t border-slate-200/50 pt-2">
+                  <span className="text-xs font-bold text-slate-500">クラウドデータベース接続</span>
+                  <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
+                    dbStatusData && !dbStatusData.error && dbStatusData.logs?.some((l: string) => l.includes("successfully"))
+                      ? "bg-emerald-50 text-emerald-600 border border-emerald-100" 
+                      : "bg-rose-50 text-rose-600 border border-rose-100"
+                  }`}>
+                    {isCheckingDb ? "診断中..." : dbStatusData && !dbStatusData.error && dbStatusData.logs?.some((l: string) => l.includes("successfully")) ? "オンライン (Supabase)" : "非アクティブ (未接続/エラー)"}
+                  </span>
+                </div>
+              </div>
+
+              {/* 接続結果サマリー */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-800">📡 同期アナリストの回答</h4>
+                {isCheckingDb ? (
+                  <p className="text-xs text-slate-500">現在、雲の上（クラウド）とアトリエの通信経路をテスト中です...</p>
+                ) : !user ? (
+                  <p className="text-xs text-amber-600 bg-amber-50/50 p-3 rounded-xl border border-amber-100/60 font-medium">
+                    現在Googleログインがされていないため、作成したデータは**「お使いのこのブラウザ内（LocalStorage）」**に保管されています。スマホや別PCなど他のデバイスと作品を同期するには、Googleでのログインを行ってください！
+                  </p>
+                ) : dbStatusData?.error ? (
+                  <p className="text-xs text-rose-600 bg-rose-50/50 p-3 rounded-xl border border-rose-100/60 font-medium">
+                    ログインは完了していますが、何らかの理由で診断APIがエラーを返しました：<br/>
+                    <strong className="block mt-1 font-mono">{dbStatusData.error}</strong>
+                  </p>
+                ) : dbStatusData && dbStatusData.logs?.some((l: string) => l.includes("failed")) ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-rose-600 bg-rose-50/50 p-3 rounded-xl border border-rose-100/60 font-medium">
+                      Googleログイン中ですが、**クラウドデータベース（Supabase）の初期テーブル自動作成処理でトラブルが発生**しているようです。そのため、データが一時的にローカルストレージへ退避（フォールバック）保存されている可能性があります。
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-emerald-600 bg-emerald-50/50 p-3 rounded-xl border border-emerald-100/60 flex flex-col gap-1">
+                    <span>🎉 **クラウド同期は完全に機能しています！**</span>
+                    <span className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                      作成されたデータはすべてSupabaseサーバーに自動保存されます。スマホや他のPCのブラウザからでも、同じGoogleアカウントでログインすると、全く同じ作品データ、登場人物、世界観を自動で同期＆共有して執筆を開始できます！
+                    </span>
+                  </p>
+                )}
+              </div>
+
+              {/* 初期化システムログ (隠し表示・デバッグ用) */}
+              {dbStatusData && (
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <span className="text-xs font-bold text-slate-500 block">🔮 データベース初期化ログ（Drizzle & Postgres）</span>
+                  <div className="bg-slate-900 text-slate-300 font-mono text-[9px] p-3 rounded-xl overflow-x-auto max-h-40 overflow-y-auto space-y-1">
+                    {dbStatusData.logs && dbStatusData.logs.length > 0 ? (
+                      dbStatusData.logs.map((log: string, idx: number) => {
+                        let color = "text-slate-300";
+                        if (log.includes("✔") || log.includes("🎉")) color = "text-emerald-400";
+                        if (log.includes("❌") || log.includes("error") || log.includes("failed")) color = "text-rose-400";
+                        if (log.includes("⚠")) color = "text-amber-400";
+                        return <div key={idx} className={color}>{log}</div>;
+                      })
+                    ) : (
+                      <div className="text-slate-500">初期化コンテンツはありません。</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 再診ボタン */}
+              <button
+                type="button"
+                onClick={checkDbStatus}
+                disabled={isCheckingDb}
+                className="w-full py-2.5 rounded-2xl bg-slate-950 text-white font-bold text-xs hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 transition"
+              >
+                {isCheckingDb ? "再テスト診断中..." : "接続状態をもう一度テストする 🔄"}
               </button>
             </div>
           </div>
