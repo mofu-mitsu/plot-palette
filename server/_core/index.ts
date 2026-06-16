@@ -4,7 +4,7 @@ import { setupVite, serveStatic } from "./vite";
 import { registerOAuthRoutes } from "./oauth";
 import { sdk } from "./sdk";
 import { COOKIE_NAME } from "../../shared/const";
-import { getDb, initLogs, ensureTablesInitialized } from "../db";
+import { getDb, initLogs, ensureTablesInitialized, getUserByOpenId, upsertUser } from "../db";
 import { users, novels, plots, characters, episodes, settings, mementos } from "../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -77,6 +77,22 @@ app.use(async (req: any, res, next) => {
       const session = await sdk.verifySession(token);
       if (session) {
         req.user = session;
+        // Transparently auto-heal the user inside DB if session is active but DB has been reset
+        try {
+          const dbUser = await getUserByOpenId(session.openId);
+          if (!dbUser) {
+            console.log(`[Auth Middleware] Session active but user '${session.openId}' is missing in DB. Running auto-heal upsert...`);
+            await upsertUser({
+              openId: session.openId,
+              name: session.name || "ユーザー",
+              email: null,
+              loginMethod: session.openId.startsWith("google:") ? "google" : "sandbox",
+              lastSignedIn: new Date(),
+            });
+          }
+        } catch (dbErr) {
+          console.error("[Auth Middleware] Auto-healing database user record failed:", dbErr);
+        }
       }
     } catch (e) {
       console.error("[Auth Middleware] Session validation failed:", e);
