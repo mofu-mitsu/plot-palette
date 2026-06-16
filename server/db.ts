@@ -35,25 +35,25 @@ async function initializeTables(sqlClient: any) {
       }
     };
 
-    // Pre-execution Schema Healing step: Check if table 'users' exists and has 'open_id' column
+    // Pre-execution Schema Healing step: Check if table 'palette_users' exists and has 'open_id' column
     try {
       const checkUsersTable = await sqlClient`
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = 'users'
+          WHERE table_schema = 'public' AND table_name = 'palette_users'
         );
       `;
       if (checkUsersTable && checkUsersTable[0] && checkUsersTable[0].exists) {
         const columns = await sqlClient`
           SELECT column_name 
           FROM information_schema.columns 
-          WHERE table_schema = 'public' AND table_name = 'users';
+          WHERE table_schema = 'public' AND table_name = 'palette_users';
         `;
         const hasOpenIdCol = columns.some((col: any) => col.column_name === "open_id");
         if (!hasOpenIdCol) {
-          console.warn("[DB Debug] ⚠ Stale 'users' table found without 'open_id' column. Wiping entire schema for clean sync.");
-          initLogs.push(`[${new Date().toISOString()}] ⚠ Old 'users' schema detected (missing 'open_id'). Triggering CASCADE schema wipe.`);
-          await sqlClient`DROP TABLE IF EXISTS memos, settings, episodes, characters, plots, novels, users CASCADE;`;
+          console.warn("[DB Debug] ⚠ Stale 'palette_users' table found without 'open_id' column. Wiping entire schema for clean sync.");
+          initLogs.push(`[${new Date().toISOString()}] ⚠ Old 'palette_users' schema detected (missing 'open_id'). Triggering CASCADE schema wipe.`);
+          await sqlClient`DROP TABLE IF EXISTS palette_memos, palette_settings, palette_episodes, palette_characters, palette_plots, palette_novels, palette_users CASCADE;`;
         }
       }
     } catch (err: any) {
@@ -66,9 +66,9 @@ async function initializeTables(sqlClient: any) {
         // 0. Enable pgcrypto for gen_random_uuid()
         await runQuery("pgcrypto extension", () => sqlClient`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
 
-        // 1. users table
-        await runQuery("users table", () => sqlClient`
-          CREATE TABLE IF NOT EXISTS users (
+        // 1. palette_users table
+        await runQuery("palette_users table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS palette_users (
             open_id TEXT PRIMARY KEY,
             name TEXT,
             email TEXT,
@@ -78,11 +78,11 @@ async function initializeTables(sqlClient: any) {
           );
         `);
 
-        // 2. novels table
-        await runQuery("novels table", () => sqlClient`
-          CREATE TABLE IF NOT EXISTS novels (
+        // 2. palette_novels table
+        await runQuery("palette_novels table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS palette_novels (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            user_id TEXT REFERENCES users(open_id) ON DELETE CASCADE,
+            user_id TEXT REFERENCES palette_users(open_id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             description TEXT,
             cover_image TEXT,
@@ -99,11 +99,11 @@ async function initializeTables(sqlClient: any) {
           );
         `);
 
-        // 3. plots table
-        await runQuery("plots table", () => sqlClient`
-          CREATE TABLE IF NOT EXISTS plots (
+        // 3. palette_plots table
+        await runQuery("palette_plots table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS palette_plots (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
+            novel_id UUID REFERENCES palette_novels(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             content TEXT,
             order_no TEXT,
@@ -113,11 +113,11 @@ async function initializeTables(sqlClient: any) {
           );
         `);
 
-        // 4. characters table
-        await runQuery("characters table", () => sqlClient`
-          CREATE TABLE IF NOT EXISTS characters (
+        // 4. palette_characters table
+        await runQuery("palette_characters table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS palette_characters (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
+            novel_id UUID REFERENCES palette_novels(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
             role TEXT,
             description TEXT,
@@ -131,11 +131,11 @@ async function initializeTables(sqlClient: any) {
           );
         `);
 
-        // 5. episodes table
-        await runQuery("episodes table", () => sqlClient`
-          CREATE TABLE IF NOT EXISTS episodes (
+        // 5. palette_episodes table
+        await runQuery("palette_episodes table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS palette_episodes (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
+            novel_id UUID REFERENCES palette_novels(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             body TEXT DEFAULT '',
             status TEXT DEFAULT '下書き',
@@ -145,11 +145,11 @@ async function initializeTables(sqlClient: any) {
           );
         `);
 
-        // 6. settings table
-        await runQuery("settings table", () => sqlClient`
-          CREATE TABLE IF NOT EXISTS settings (
+        // 6. palette_settings table
+        await runQuery("palette_settings table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS palette_settings (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
+            novel_id UUID REFERENCES palette_novels(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             category TEXT DEFAULT '世界観',
             detail TEXT DEFAULT '',
@@ -159,11 +159,11 @@ async function initializeTables(sqlClient: any) {
           );
         `);
 
-        // 7. memos (mementos) table
-        await runQuery("memos table", () => sqlClient`
-          CREATE TABLE IF NOT EXISTS memos (
+        // 7. palette_memos table
+        await runQuery("palette_memos table", () => sqlClient`
+          CREATE TABLE IF NOT EXISTS palette_memos (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            novel_id UUID REFERENCES novels(id) ON DELETE CASCADE,
+            novel_id UUID REFERENCES palette_novels(id) ON DELETE CASCADE,
             title TEXT DEFAULT '無題のメモ',
             content TEXT DEFAULT '',
             color TEXT DEFAULT '#fffbeb',
@@ -184,7 +184,7 @@ async function initializeTables(sqlClient: any) {
           console.warn("[DB Debug] ⚠ Triggering full cascade DROP and schema rebuilding retry...");
           initLogs.push(`[${new Date().toISOString()}] ⚠ Carrying out safe complete schema cascade drop and retry initialization...`);
           try {
-            await sqlClient`DROP TABLE IF EXISTS memos, settings, episodes, characters, plots, novels, users CASCADE;`;
+            await sqlClient`DROP TABLE IF EXISTS palette_memos, palette_settings, palette_episodes, palette_characters, palette_plots, palette_novels, palette_users CASCADE;`;
           } catch (dropErr: any) {
             console.error("[DB Debug] Fallback CASCADE drop failed:", dropErr.message || dropErr);
           }

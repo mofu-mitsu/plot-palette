@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, uuid, integer, boolean, jsonb } from "drizzle-orm/pg-core";
 
-export const users = pgTable("users", {
+export const users = pgTable("palette_users", {
   openId: text("open_id").primaryKey(),
   name: text("name"),
   email: text("email"),
@@ -9,7 +9,7 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const novels = pgTable("novels", {
+export const novels = pgTable("palette_novels", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").references(() => users.openId, { onDelete: "cascade" }),
   title: text("title").notNull(),
@@ -27,7 +27,7 @@ export const novels = pgTable("novels", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const plots = pgTable("plots", {
+export const plots = pgTable("palette_plots", {
   id: uuid("id").primaryKey().defaultRandom(),
   novelId: uuid("novel_id").references(() => novels.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
@@ -38,7 +38,7 @@ export const plots = pgTable("plots", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const characters = pgTable("characters", {
+export const characters = pgTable("palette_characters", {
   id: uuid("id").primaryKey().defaultRandom(),
   novelId: uuid("novel_id").references(() => novels.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
@@ -53,7 +53,7 @@ export const characters = pgTable("characters", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const episodes = pgTable("episodes", {
+export const episodes = pgTable("palette_episodes", {
   id: uuid("id").primaryKey().defaultRandom(),
   novelId: uuid("novel_id").references(() => novels.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
@@ -64,7 +64,7 @@ export const episodes = pgTable("episodes", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const settings = pgTable("settings", {
+export const settings = pgTable("palette_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   novelId: uuid("novel_id").references(() => novels.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
@@ -75,7 +75,7 @@ export const settings = pgTable("settings", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const mementos = pgTable("memos", {
+export const mementos = pgTable("palette_memos", {
   id: uuid("id").primaryKey().defaultRandom(),
   novelId: uuid("novel_id").references(() => novels.id, { onDelete: "cascade" }),
   title: text("title").default("無題のメモ"),
