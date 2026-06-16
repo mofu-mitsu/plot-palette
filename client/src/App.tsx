@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Login from "./pages/Login";
 import { 
   Book, 
@@ -71,7 +71,39 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   // Core Novel Navigation
-  const [novels, setNovels] = useState<Novel[]>([]);
+  const [rawNovels, setRawNovels] = useState<Novel[]>([]);
+  const novels = rawNovels;
+  const setNovels = (val: Novel[] | ((prev: Novel[]) => Novel[])) => {
+    setRawNovels((prevRaw) => {
+      const resolved = typeof val === "function" ? val(prevRaw) : val;
+      if (!Array.isArray(resolved)) return [];
+
+      const seenIds = new Set<string>();
+      const seenTitles = new Set<string>();
+      const result: Novel[] = [];
+
+      const onlineNovels = resolved.filter(n => n && n.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(n.id));
+      const offlineNovels = resolved.filter(n => n && n.id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(n.id));
+
+      for (const n of [...onlineNovels, ...offlineNovels]) {
+        if (!n || !n.id) continue;
+        if (seenIds.has(n.id)) continue;
+        if (n.title && seenTitles.has(n.title)) continue;
+        
+        seenIds.add(n.id);
+        if (n.title) {
+          seenTitles.add(n.title);
+        }
+        result.push(n);
+      }
+
+      return result.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+    });
+  };
   const [selectedNovel, setSelectedNovel] = useState<Novel | null>(null);
 
   // Active workspace tab (Nora features setup)
@@ -114,6 +146,7 @@ export default function App() {
   const [newPlotTimeline, setNewPlotTimeline] = useState("");
 
   // Characters Modals / Form
+  const saveTimeoutRef = useRef<any>(null);
   const [showCharModal, setShowCharModal] = useState(false);
   const [editingChar, setEditingChar] = useState<Character | null>(null);
   const [newCharName, setNewCharName] = useState("");
@@ -790,10 +823,11 @@ export default function App() {
 
         // スマホなどで確実にダウンロード・共有させるためのBlob処理
         const blob = pdf.output("blob");
-        const file = new File([blob], `${episode.title || "episode"}.pdf`, { type: "application/pdf" });
         
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
+        // 🚀 IMPROVEMENT: デスクトップ環境では Web API navigator.share をスキップして直接 PDF をダウンロードさせる。
+        // モバイル（スマホやタブレット）の場合のみ、別タブプレビューや共有メニューを優遇する。
         if (isMobile) {
           try {
             const pdfDataUri = pdf.output("datauristring");
@@ -822,17 +856,8 @@ export default function App() {
           } catch (e) {
             triggerDownload(blob, `${episode.title || "episode"}.pdf`);
           }
-        } else if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: episode.title || "無題の執筆",
-            });
-            toast.success("PDFの共有・保存が完了しました！");
-          } catch (shareErr) {
-            triggerDownload(blob, `${episode.title || "episode"}.pdf`);
-          }
         } else {
+          // PCの場合は迷わず直接ダウンロード（aタグ click 発火）！
           triggerDownload(blob, `${episode.title || "episode"}.pdf`);
         }
 
@@ -1618,27 +1643,34 @@ export default function App() {
       wordCount: count,
     };
 
-    // Fast UI state reactive update
+    // 🚀 IMPROVEMENT: 即時に UI 側エピソードステートを更新（文字数カウンター・統計グラフに1ミリ秒で即座に反映！）
     setActiveEpisode(updatedDoc);
-    setEpisodes(episodes.map((e) => (e.id === activeEpisode.id ? updatedDoc : e)));
+    setEpisodes((prev) => prev.map((e) => (e.id === activeEpisode.id ? updatedDoc : e)));
 
-    // Debounce / direct save
+    // 📡 DEBOUNCE SAVING: 毎文字送信を防ぐ（タイピング終了1.2秒後に静かに自動保存）
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
     setSyncStatus("saving");
-    fetch(`/api/novels/${selectedNovel.id}/episodes/${activeEpisode.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedDoc),
-    })
-      .then((res) => {
-        if (res.ok) {
-          setSyncStatus("synced");
-        } else {
-          setSyncStatus("offline");
-        }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      fetch(`/api/novels/${selectedNovel.id}/episodes/${activeEpisode.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedDoc),
       })
-      .catch(() => {
-        setSyncStatus("offline");
-      });
+        .then((res) => {
+          if (res.ok) {
+            setSyncStatus("synced");
+          } else {
+            setSyncStatus("offline");
+          }
+        })
+        .catch(() => {
+          setSyncStatus("offline");
+        });
+    }, 1200);
   };
 
   const handleToggleEpisodeStatus = (status: "下書き" | "完成" | "推敲中") => {
