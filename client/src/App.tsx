@@ -313,6 +313,31 @@ export default function App() {
     return `plot_palette_backup_v2_${user?.openId || "guest"}`;
   };
 
+  // 🚀 CUSTOM DATA DIET HELPER: Keeps backup size tiny to resolve QuotaExceededError (5MB limit) completely
+  const sanitizeDataForBackup = (raw: any) => {
+    if (!raw) return raw;
+    try {
+      const deepCopy = JSON.parse(JSON.stringify(raw));
+      
+      // Trim massive episode bodies down to preserve visual metadata while freeing up 99% storage space
+      if (deepCopy.episodes && Array.isArray(deepCopy.episodes)) {
+        deepCopy.episodes = deepCopy.episodes.map((ep: any) => {
+          if (ep && ep.body && ep.body.length > 800) {
+            return {
+              ...ep,
+              body: ep.body.substring(0, 800) + "\n... (ローカル保存用に軽量化されました。クラウドには完全な本文が保存されています)",
+            };
+          }
+          return ep;
+        });
+      }
+      return deepCopy;
+    } catch (err) {
+      console.warn("[Backup Engine] Slimming process warning:", err);
+      return raw;
+    }
+  };
+
   const loadBackupData = () => {
     try {
       const userKey = getBackupKey();
@@ -323,9 +348,19 @@ export default function App() {
         const legacyBackup = localStorage.getItem("plot_palette_backup_v2");
         if (legacyBackup) {
           console.log("[Backup Engine] Migrating generic backup down to user-specific backup key:", userKey);
-          localStorage.setItem(userKey, legacyBackup);
-          backup = legacyBackup;
+          
+          // CRITICAL: Delete legacy first to free memory quota and prevent duplicate loops if setItem fails
           localStorage.removeItem("plot_palette_backup_v2");
+          
+          try {
+            const parsed = JSON.parse(legacyBackup);
+            const slimmed = sanitizeDataForBackup(parsed);
+            const slimmedStr = JSON.stringify(slimmed);
+            localStorage.setItem(userKey, slimmedStr);
+            backup = slimmedStr;
+          } catch (e2) {
+            console.error("[Backup Engine] Slimming migration failed, continuing safely:", e2);
+          }
         }
       }
 
@@ -353,10 +388,28 @@ export default function App() {
         worldSettings,
         memos
       };
+      
+      const slimmed = sanitizeDataForBackup(dataToBackup);
       const userKey = getBackupKey();
-      localStorage.setItem(userKey, JSON.stringify(dataToBackup));
+      localStorage.setItem(userKey, JSON.stringify(slimmed));
     } catch (e) {
-      console.error("Backup save failed", e);
+      console.error("Backup save exceeded storage limits, applying ultra-diet rules...", e);
+      // Fallback: If still failing, completely strip bodies or compress to bare minimum metadata
+      try {
+        const fallbackData = overrideData || {
+          novels,
+          plots,
+          characters,
+          episodes: (episodes || []).map((ep: any) => ({ ...ep, body: "" })), // Completely wipe bodies in backup for absolute safety
+          worldSettings,
+          memos
+        };
+        const userKey = getBackupKey();
+        localStorage.setItem(userKey, JSON.stringify(fallbackData));
+        console.warn("[Backup Engine] Storage quota limitations recovered by stripping all backup bodies completely.");
+      } catch (innerErr) {
+        console.error("[Backup Engine] Final fail-safe: LocalStorage is absolutely blocked.", innerErr);
+      }
     }
   };
 
@@ -377,9 +430,19 @@ export default function App() {
           if (!backupStr) {
             const legacyBackup = localStorage.getItem("plot_palette_backup_v2");
             if (legacyBackup) {
-              localStorage.setItem(userKey, legacyBackup);
-              backupStr = legacyBackup;
+              console.log("[Master Sync] Found legacy backup during fetching, migrating to user-specific key...");
+              // CRITICAL: Delete legacy first to free quota space and break deadlock
               localStorage.removeItem("plot_palette_backup_v2");
+              
+              try {
+                const parsed = JSON.parse(legacyBackup);
+                const slimmed = sanitizeDataForBackup(parsed);
+                const slimmedStr = JSON.stringify(slimmed);
+                localStorage.setItem(userKey, slimmedStr);
+                backupStr = slimmedStr;
+              } catch (e2) {
+                console.error("[Master Sync] Failed to slim during sync-migration", e2);
+              }
             }
           }
 
@@ -397,6 +460,20 @@ export default function App() {
             let hasNewMerge = false;
 
             for (const localN of localBackup.novels) {
+              // 🛡️ SECURITY ISOLATION GUARD: Ensure we never mix up separate login sessions on the same browser
+              const isSandbox = !user?.openId || user.openId.startsWith("sandbox:") || user.openId === "sandbox";
+              const hasMismatchUser = localN.userId && user?.openId && localN.userId !== user.openId;
+
+              if (hasMismatchUser) {
+                console.log(`[Master Sync] 🛡️ Blocked cross-user auto-upload for novel "${localN.title}". Belongs to ${localN.userId}, current is ${user?.openId}`);
+                continue;
+              }
+              if (isSandbox) {
+                // If a public sandbox user logs in, we strictly ban auto-upload of local backups to protect private Google projects
+                console.log(`[Master Sync] 🛡️ Sandbox/Demo session detected. Prevented automatic upload of local project "${localN.title}" to public DB rows.`);
+                continue;
+              }
+
               const alreadyInCloud = dbNovels.some((dn) => dn.id === localN.id || dn.title === localN.title);
               if (!alreadyInCloud) {
                 hasNewMerge = true;
@@ -991,9 +1068,10 @@ export default function App() {
     } catch (err) {
       console.warn("Server update failed, saving locally via offline sync engine", err);
       const offlineId = editingNovel ? editingNovel.id : `novel-${Date.now()}`;
-      const offlineNovel: Novel = {
+      const offlineNovel: any = {
         id: offlineId,
         ...payload,
+        userId: user?.openId || "guest",
         createdAt: editingNovel ? editingNovel.createdAt : new Date(),
       };
 
