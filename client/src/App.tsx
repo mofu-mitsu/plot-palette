@@ -485,6 +485,16 @@ export default function App() {
 
             if (hasNewMerge) {
               setNovels(syncedNovels);
+              // 即時にローカルバックアップのnovelsをクラウド同期後の正しいデータに置き換え、再マージや古いIDでの重複を防ぐ
+              const updatedBackup = {
+                novels: syncedNovels,
+                plots: localBackup.plots || [],
+                characters: localBackup.characters || [],
+                episodes: localBackup.episodes || [],
+                worldSettings: localBackup.worldSettings || [],
+                memos: localBackup.memos || []
+              };
+              localStorage.setItem("plot_palette_backup_v2", JSON.stringify(updatedBackup));
               toast.success("オフラインで作成された未同期プロジェクトが自動移行・マージされました 📡✨");
             } else {
               setNovels(dbNovels);
@@ -890,6 +900,7 @@ export default function App() {
         if (res.ok) {
           const created = await res.json();
           setNovels([...novels, created]);
+          setSelectedNovel(created); // 新規作成されたら自動的にアトリエ選択状態（アクティブ）へ！
           if (selectedTemplate !== "none") {
             await createTemplateData(created.id, selectedTemplate);
           }
@@ -915,6 +926,7 @@ export default function App() {
         }
       } else {
         setNovels([...novels, offlineNovel]);
+        setSelectedNovel(offlineNovel); // オフライン新規作成でも自動選択！
         // オフライン用簡易テンプレート初期化
         if (selectedTemplate === "novel_long") {
           const offlinePlots = [
