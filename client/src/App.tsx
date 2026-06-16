@@ -91,6 +91,9 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<"synced" | "saving" | "offline">("synced");
 
   // --- Modals Form States ---
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [novelToDelete, setNovelToDelete] = useState<Novel | null>(null);
+
   const [showNovelModal, setShowNovelModal] = useState(false);
   const [editingNovel, setEditingNovel] = useState<Novel | null>(null);
   const [newNovelTitle, setNewNovelTitle] = useState("");
@@ -306,9 +309,26 @@ export default function App() {
 
   // --- Hybrid Backup Synchronization System (Master Sync Engine) ---
   // If servers spin down, restart, or DB defaults, we seamlessly load from locale & push updates back!
+  const getBackupKey = () => {
+    return `plot_palette_backup_v2_${user?.openId || "guest"}`;
+  };
+
   const loadBackupData = () => {
     try {
-      const backup = localStorage.getItem("plot_palette_backup_v2");
+      const userKey = getBackupKey();
+      let backup = localStorage.getItem(userKey);
+
+      // Migrate from old generic key if userKey is empty but old key has data
+      if (!backup) {
+        const legacyBackup = localStorage.getItem("plot_palette_backup_v2");
+        if (legacyBackup) {
+          console.log("[Backup Engine] Migrating generic backup down to user-specific backup key:", userKey);
+          localStorage.setItem(userKey, legacyBackup);
+          backup = legacyBackup;
+          localStorage.removeItem("plot_palette_backup_v2");
+        }
+      }
+
       if (backup) {
         const parsed = JSON.parse(backup);
         if (parsed.novels && parsed.novels.length > 0) {
@@ -333,7 +353,8 @@ export default function App() {
         worldSettings,
         memos
       };
-      localStorage.setItem("plot_palette_backup_v2", JSON.stringify(dataToBackup));
+      const userKey = getBackupKey();
+      localStorage.setItem(userKey, JSON.stringify(dataToBackup));
     } catch (e) {
       console.error("Backup save failed", e);
     }
@@ -349,7 +370,19 @@ export default function App() {
           return res.json();
         })
         .then(async (dbNovels: any[]) => {
-          const backupStr = localStorage.getItem("plot_palette_backup_v2");
+          const userKey = getBackupKey();
+          let backupStr = localStorage.getItem(userKey);
+
+          // Migrate if needed during fetching
+          if (!backupStr) {
+            const legacyBackup = localStorage.getItem("plot_palette_backup_v2");
+            if (legacyBackup) {
+              localStorage.setItem(userKey, legacyBackup);
+              backupStr = legacyBackup;
+              localStorage.removeItem("plot_palette_backup_v2");
+            }
+          }
+
           let localBackup: any = null;
           if (backupStr) {
             try {
@@ -475,6 +508,23 @@ export default function App() {
                       }).catch(e => console.error("Episode migrate err", e));
                     }
 
+                    // 🚀 CRITICAL FIX: Rewrite sub-collection parent IDs to Cloud UUID inside localBackup cache to stop duplicates
+                    if (localBackup.plots) {
+                      localBackup.plots = localBackup.plots.map((x: any) => x.novelId === oldLocalId ? { ...x, novelId: newCloudId } : x);
+                    }
+                    if (localBackup.characters) {
+                      localBackup.characters = localBackup.characters.map((x: any) => x.novelId === oldLocalId ? { ...x, novelId: newCloudId } : x);
+                    }
+                    if (localBackup.worldSettings) {
+                      localBackup.worldSettings = localBackup.worldSettings.map((x: any) => x.novelId === oldLocalId ? { ...x, novelId: newCloudId } : x);
+                    }
+                    if (localBackup.memos) {
+                      localBackup.memos = localBackup.memos.map((x: any) => x.novelId === oldLocalId ? { ...x, novelId: newCloudId } : x);
+                    }
+                    if (localBackup.episodes) {
+                      localBackup.episodes = localBackup.episodes.map((x: any) => x.novelId === oldLocalId ? { ...x, novelId: newCloudId } : x);
+                    }
+
                     console.log(`[Master Sync] Successfully processed and uploaded "${localN.title}"!`);
                   }
                 } catch (e) {
@@ -485,7 +535,6 @@ export default function App() {
 
             if (hasNewMerge) {
               setNovels(syncedNovels);
-              // 即時にローカルバックアップのnovelsをクラウド同期後の正しいデータに置き換え、再マージや古いIDでの重複を防ぐ
               const updatedBackup = {
                 novels: syncedNovels,
                 plots: localBackup.plots || [],
@@ -494,7 +543,7 @@ export default function App() {
                 worldSettings: localBackup.worldSettings || [],
                 memos: localBackup.memos || []
               };
-              localStorage.setItem("plot_palette_backup_v2", JSON.stringify(updatedBackup));
+              localStorage.setItem(userKey, JSON.stringify(updatedBackup));
               toast.success("オフラインで作成された未同期プロジェクトが自動移行・マージされました 📡✨");
             } else {
               setNovels(dbNovels);
@@ -520,46 +569,75 @@ export default function App() {
     }
   }, [novels, plots, characters, episodes, worldSettings, memos, selectedNovel]);
 
-  // Fetch sub collections when selected novel changes
+  // Fetch sub collections when selected novel changes with defensive robust array assurance
   useEffect(() => {
     if (selectedNovel) {
+      const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedNovel.id);
+      
+      if (!isValidUuid) {
+        console.log(`[Sync Engine] selectedNovel is an offline ID '${selectedNovel.id}', fallback to local backup.`);
+        const userKey = `plot_palette_backup_v2_${user?.openId || "guest"}`;
+        const backupStr = localStorage.getItem(userKey);
+        if (backupStr) {
+          try {
+            const parsed = JSON.parse(backupStr);
+            const id = selectedNovel.id;
+            setPlots((parsed.plots || []).filter((p: any) => p.novelId === id));
+            setCharacters((parsed.characters || []).filter((c: any) => c.novelId === id));
+            setEpisodes((parsed.episodes || []).filter((e: any) => e.novelId === id));
+            setWorldSettings((parsed.worldSettings || []).filter((s: any) => s.novelId === id));
+            setMemos((parsed.memos || []).filter((m: any) => m.novelId === id));
+          } catch (e) {
+            console.error("Local restore for temporary offline novel failed", e);
+          }
+        }
+        return;
+      }
+
       setSyncStatus("saving");
       Promise.all([
-        fetch(`/api/novels/${selectedNovel.id}/plots`).then((r) => r.json()),
-        fetch(`/api/novels/${selectedNovel.id}/characters`).then((r) => r.json()),
-        fetch(`/api/novels/${selectedNovel.id}/episodes`).then((r) => r.json()),
-        fetch(`/api/novels/${selectedNovel.id}/settings`).then((r) => r.json()),
-        fetch(`/api/novels/${selectedNovel.id}/memos`).then((r) => r.json())
+        fetch(`/api/novels/${selectedNovel.id}/plots`)
+          .then((r) => r.ok ? r.json() : [])
+          .catch(() => []),
+        fetch(`/api/novels/${selectedNovel.id}/characters`)
+          .then((r) => r.ok ? r.json() : [])
+          .catch(() => []),
+        fetch(`/api/novels/${selectedNovel.id}/episodes`)
+          .then((r) => r.ok ? r.json() : [])
+          .catch(() => []),
+        fetch(`/api/novels/${selectedNovel.id}/settings`)
+          .then((r) => r.ok ? r.json() : [])
+          .catch(() => []),
+        fetch(`/api/novels/${selectedNovel.id}/memos`)
+          .then((r) => r.ok ? r.json() : [])
+          .catch(() => [])
       ])
         .then(([p, c, e, s, m]) => {
-          setPlots(p);
-          setCharacters(c);
-          setEpisodes(e);
-          setWorldSettings(s);
-          setMemos(m);
+          setPlots(Array.isArray(p) ? p : []);
+          setCharacters(Array.isArray(c) ? c : []);
+          setEpisodes(Array.isArray(e) ? e : []);
+          setWorldSettings(Array.isArray(s) ? s : []);
+          setMemos(Array.isArray(m) ? m : []);
+          setSyncStatus("synced");
 
           // Auto select first episode for editor if exists
-          if (e && e.length > 0) {
+          if (Array.isArray(e) && e.length > 0) {
             setActiveEpisode(e[0]);
           } else {
             setActiveEpisode(null);
           }
-          setSyncStatus("synced");
         })
-        .catch((error) => {
-          console.error("Network fetching error, checking fallback restore", error);
-          const backup = loadBackupData();
-          if (backup) {
-            setPlots(backup.plots?.filter((x: any) => x.novelId === selectedNovel.id) || []);
-            setCharacters(backup.characters?.filter((x: any) => x.novelId === selectedNovel.id) || []);
-            setEpisodes(backup.episodes?.filter((x: any) => x.novelId === selectedNovel.id) || []);
-            setWorldSettings(backup.worldSettings?.filter((x: any) => x.novelId === selectedNovel.id) || []);
-            setMemos(backup.memos?.filter((x: any) => x.novelId === selectedNovel.id) || []);
-          }
+        .catch((err) => {
+          console.error("Failed to load novel sub-collections", err);
+          setPlots([]);
+          setCharacters([]);
+          setEpisodes([]);
+          setWorldSettings([]);
+          setMemos([]);
           setSyncStatus("offline");
         });
     }
-  }, [selectedNovel]);
+  }, [user, selectedNovel]);
 
   // Auth logout
   const handleLogout = async () => {
@@ -967,10 +1045,18 @@ export default function App() {
     }
   };
 
-  const handleDeleteNovel = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteNovel = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("本当にこのプロット・小説アトリエ設定をすべて削除する？（取り消せません）")) return;
+    const target = novels.find((n) => n.id === id);
+    if (target) {
+      setNovelToDelete(target);
+      setShowDeleteConfirmModal(true);
+    }
+  };
 
+  const executeDeleteNovel = async () => {
+    if (!novelToDelete) return;
+    const id = novelToDelete.id;
     setSyncStatus("saving");
     try {
       const res = await fetch(`/api/novels/${id}`, { method: "DELETE" });
@@ -978,6 +1064,7 @@ export default function App() {
         setNovels(novels.filter((n) => n.id !== id));
         if (selectedNovel?.id === id) setSelectedNovel(null);
         setSyncStatus("synced");
+        toast.success(`アトリエ「${novelToDelete.title}」を完全に削除しました 🗑️`);
       } else {
         throw new Error("Delete API failed");
       }
@@ -986,6 +1073,10 @@ export default function App() {
       setNovels(novels.filter((n) => n.id !== id));
       if (selectedNovel?.id === id) setSelectedNovel(null);
       setSyncStatus("offline");
+      toast.success(`「${novelToDelete.title}」をローカルから削除しました 🗑️ (オフライン)`);
+    } finally {
+      setShowDeleteConfirmModal(false);
+      setNovelToDelete(null);
     }
   };
 
@@ -3711,6 +3802,49 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* ========================================================
+         MODALS: プロジェクト削除確認モーダル (アラートの完全代替)
+         ======================================================== */}
+      {showDeleteConfirmModal && novelToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-rose-950/10 animate-in fade-in zoom-in duration-150 flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 mb-4 animate-bounce">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            
+            <h4 className="text-lg font-serif font-black text-amber-950 mb-2">
+              アトリエを完全に削除してもいい？
+            </h4>
+            
+            <p className="text-sm text-amber-900/70 leading-relaxed mb-6 text-center">
+              アトリエ <span className="font-bold text-rose-800 font-serif">「{novelToDelete.title}」</span> に紐づくプロット、登場人物パレット、執筆エピソード（本文）、世界観メモなどすべての設定資料が削除され、取り消せなくなります。
+            </p>
+            
+            <div className="flex gap-3 w-full justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteConfirmModal(false);
+                  setNovelToDelete(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-amber-900/10 bg-amber-500/5 hover:bg-amber-500/10 text-amber-950 font-medium transition text-sm cursor-pointer"
+              >
+                大切に残しておく
+              </button>
+              
+              <button
+                type="button"
+                onClick={executeDeleteNovel}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white font-medium transition duration-150 shadow-md shadow-rose-600/10 text-sm cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                完全に削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================
          MODALS: 小説作成・編集モーダル (パレット決定ボタンを完全に担保)

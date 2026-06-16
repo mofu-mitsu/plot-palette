@@ -109,6 +109,26 @@ function requireAuth(req: any, res: any, next: any) {
   next();
 }
 
+// Guarantee user database record exists to prevent foreign key constraint violations
+async function ensureUserExistsInDb(session: any) {
+  if (!session || !session.openId) return;
+  try {
+    const existing = await getUserByOpenId(session.openId);
+    if (!existing) {
+      console.log(`[DB Auto-Provision] User '${session.openId}' missing in DB. Provisioning parent row now...`);
+      await upsertUser({
+        openId: session.openId,
+        name: session.name || "ユーザー",
+        email: null,
+        loginMethod: session.openId.startsWith("google:") ? "google" : "sandbox",
+        lastSignedIn: new Date(),
+      });
+    }
+  } catch (err) {
+    console.error("[DB Auto-Provision] Error ensuring DB user exists:", err);
+  }
+}
+
 // UUID validation helper to prevent syntax errors in Postgres queries
 function isValidUuid(id: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -221,6 +241,7 @@ const mockDb: MockDb = {
 // --- Novels API ---
 app.get("/api/novels", requireAuth, async (req: any, res) => {
   const openId = req.user.openId;
+  await ensureUserExistsInDb(req.user);
   const dbConnection = getDb();
 
   if (dbConnection) {
@@ -241,6 +262,7 @@ app.get("/api/novels", requireAuth, async (req: any, res) => {
 
 app.post("/api/novels", requireAuth, async (req: any, res) => {
   const openId = req.user.openId;
+  await ensureUserExistsInDb(req.user);
   const { 
     title, description, coverImage, themeDoc, targetAudience, 
     endingDoc, wordGoal, writeDays, chartImage, chartMemo, referenceLinks 
