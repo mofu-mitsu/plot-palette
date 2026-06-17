@@ -1145,6 +1145,7 @@ export default function App() {
     }
     setThemeState(theme);
     localStorage.setItem("plot_palette_theme_v1", theme);
+    syncPreferencesToCloud({ theme });
     
     // 通知を追加
     const newNotif = {
@@ -2209,6 +2210,16 @@ export default function App() {
             >
               <Share2 className="w-4 h-4 text-slate-500" />
               <span>アトリエをシェア📢</span>
+            </button>
+            
+            {/* パレットテーマ着せ替えトリガー (全画面＆デスクトップのみ) */}
+            <button
+              onClick={() => setShowPaletteModal(true)}
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-white hover:bg-slate-50 border border-slate-200 shadow-sm transition text-slate-700"
+              title="カラーパレットを変更"
+            >
+              <Palette className="w-4 h-4 text-pink-500 animate-spin-slow" />
+              <span>パレット🎨</span>
             </button>
           </div>
 
@@ -4227,6 +4238,13 @@ export default function App() {
                       localStorage.setItem("palette_custom_text", "#4c0519");
                       localStorage.setItem("palette_custom_border", "#fecdd3");
                       localStorage.setItem("palette_custom_accent", "#db2777");
+                      syncPreferencesToCloud({
+                        customBg: "#fff5f6",
+                        customCard: "#ffffff",
+                        customText: "#4c0519",
+                        customBorder: "#fecdd3",
+                        customAccent: "#db2777"
+                      });
                     }}
                     className="text-[10px] text-slate-400 hover:text-pink-600 underline font-semibold"
                   >
@@ -4306,7 +4324,17 @@ export default function App() {
             <div className="mt-5 pt-4 border-t border-slate-100 flex justify-end">
               <button
                 type="button"
-                onClick={() => setShowPaletteModal(false)}
+                onClick={() => {
+                  setShowPaletteModal(false);
+                  syncPreferencesToCloud({
+                    theme: themeState,
+                    customBg,
+                    customCard,
+                    customText,
+                    customBorder,
+                    customAccent
+                  });
+                }}
                 className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-6 rounded-full text-xs transition shadow-md shadow-pink-100 cursor-pointer"
               >
                 この色を適用する
@@ -5598,8 +5626,8 @@ export default function App() {
               </div>
               
               {!isPremium && (
-                <div className="mt-12 text-center text-[10px] text-slate-400 font-sans tracking-widest border-t border-slate-100 pt-4">
-                   Created by 創作支援アトリエ Plot Palette
+                <div className="mt-16 text-center text-xs text-slate-500 font-sans tracking-widest border-t border-slate-200 pt-6 font-bold flex flex-col items-center justify-center gap-2">
+                   <span>🖋️ Created by 創作支援アトリエ Plot Palette</span>
                 </div>
               )}
             </div>
