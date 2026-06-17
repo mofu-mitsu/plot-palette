@@ -527,6 +527,31 @@ export default function App() {
         }
         if (data.user) {
           setIsNovelsLoading(true);
+          // DB上のテーマパレット・カラー preferences を自動的にブラウザに流し込む 🎨👑
+          if (data.user.theme) {
+            setThemeState(data.user.theme);
+            localStorage.setItem("plot_palette_theme_v1", data.user.theme);
+          }
+          if (data.user.customBg) {
+            setCustomBg(data.user.customBg);
+            localStorage.setItem("palette_custom_bg", data.user.customBg);
+          }
+          if (data.user.customCard) {
+            setCustomCard(data.user.customCard);
+            localStorage.setItem("palette_custom_card", data.user.customCard);
+          }
+          if (data.user.customText) {
+            setCustomText(data.user.customText);
+            localStorage.setItem("palette_custom_text", data.user.customText);
+          }
+          if (data.user.customBorder) {
+            setCustomBorder(data.user.customBorder);
+            localStorage.setItem("palette_custom_border", data.user.customBorder);
+          }
+          if (data.user.customAccent) {
+            setCustomAccent(data.user.customAccent);
+            localStorage.setItem("palette_custom_accent", data.user.customAccent);
+          }
         }
         setLoading(false);
       })
@@ -536,6 +561,25 @@ export default function App() {
         setIsNovelsLoading(false);
       });
   }, []);
+
+  const syncPreferencesToCloud = async (prefs: {
+    theme?: string;
+    customBg?: string;
+    customCard?: string;
+    customText?: string;
+    customBorder?: string;
+    customAccent?: string;
+  }) => {
+    try {
+      await fetch("/api/user/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(prefs),
+      });
+    } catch (e) {
+      console.error("[Preferences Sync] Error:", e);
+    }
+  };
 
   // --- Hybrid Backup Synchronization System (Master Sync Engine) ---
   // If servers spin down, restart, or DB defaults, we seamlessly load from locale & push updates back!
@@ -1050,14 +1094,37 @@ export default function App() {
           toast.success("PDFをダウンロードしました！");
         };
 
-        // すべてのブラウザ環境で一律に Blob A-link による直接ダウンロードを発行する
         const blob = pdf.output("blob");
         const filename = `${episode.title || "episode"}.pdf`;
-        triggerDownload(blob, filename);
 
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        
+        if (isMobile && navigator.share) {
+          try {
+            const file = new File([blob], filename, { type: "application/pdf" });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                title: filename,
+                files: [file]
+              });
+              toast.success("PDFを出力しました。");
+              setIsPrintingMode(false);
+              setPrintingEpisode(null);
+            } else {
+              triggerDownload(blob, filename);
+            }
+          } catch (shareErr) {
+            console.log("Web Share API canceled or failed:", shareErr);
+            triggerDownload(blob, filename);
+          }
+        } else {
+          triggerDownload(blob, filename);
+          setIsPrintingMode(false);
+          setPrintingEpisode(null);
+        }
+
         if (isMobile) {
-          toast.info("📱 スマホ環境でPDFダウンロードが開始されない場合は、文字数が少なめの短編への分割や、執筆スタジオからクリップボードへの全コピー・保存をお試しください！", { duration: 6000 });
+          toast.info("📱 スマホ環境でPDFダウンロードが開始されない場合は、クリップボードへのコピーなどをお試しください！", { duration: 6000 });
         }
 
       } catch (err) {
@@ -2145,18 +2212,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* パレットテーマ着せ替えトリガー (全画面＆レスポンシブな共通モーダルへ統合 🎨) */}
-          <div className="relative">
-            <button
-              onClick={() => setShowPaletteModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-extrabold bg-slate-50 hover:bg-slate-100 border border-slate-200/60 shadow-sm transition text-slate-700"
-              title="カラーパレットを変更"
-            >
-              <Palette className="w-3.5 h-3.5 text-pink-500 animate-spin-slow" />
-              <span>パレット🎨</span>
-            </button>
-          </div>
-
           {/* プレミアム快適化アップグレードボタン */}
           <button
             onClick={() => setShowPremiumModal(true)}
@@ -2553,13 +2608,17 @@ export default function App() {
             </div>
 
             {/* クリエイティブ ワークスペース用のタブレイアウト (パステルパレット調) */}
-            <div className="flex flex-wrap border-b border-pink-50 mb-6 gap-1 md:gap-2 bg-pink-50/20 p-1 rounded-xl">
+            <div 
+              style={{ borderColor: "var(--accent-light, #fff5f6)", backgroundColor: "var(--accent-light, #fff5f6)" }}
+              className="flex flex-wrap border-b mb-6 gap-1 md:gap-2 bg-opacity-20 p-1.5 rounded-2xl"
+            >
               <button
                 onClick={() => setActiveTab("plots")}
-                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-lg text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
+                style={activeTab === "plots" ? { backgroundColor: "var(--accent-color, #db2777)" } : {}}
+                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
                   activeTab === "plots"
-                    ? "bg-gradient-to-r from-pink-500 to-rose-450 text-white shadow-sm"
-                    : "text-slate-600 hover:text-pink-600 hover:bg-pink-50/40"
+                    ? "text-white shadow-md shadow-pink-100/20"
+                    : "text-slate-600 hover:text-pink-600 hover:bg-black/5"
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
@@ -2567,10 +2626,11 @@ export default function App() {
               </button>
               <button
                 onClick={() => setActiveTab("relations")}
-                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-lg text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
+                style={activeTab === "relations" ? { backgroundColor: "var(--accent-color, #db2777)" } : {}}
+                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
                   activeTab === "relations"
-                    ? "bg-gradient-to-r from-pink-500 to-rose-450 text-white shadow-sm"
-                    : "text-slate-600 hover:text-pink-600 hover:bg-pink-50/40"
+                    ? "text-white shadow-md shadow-pink-100/20"
+                    : "text-slate-600 hover:text-pink-600 hover:bg-black/5"
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
@@ -2578,10 +2638,11 @@ export default function App() {
               </button>
               <button
                 onClick={() => setActiveTab("write")}
-                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-lg text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
+                style={activeTab === "write" ? { backgroundColor: "var(--accent-color, #db2777)" } : {}}
+                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
                   activeTab === "write"
-                    ? "bg-gradient-to-r from-pink-500 to-rose-450 text-white shadow-sm"
-                    : "text-slate-600 hover:text-pink-600 hover:bg-pink-50/40"
+                    ? "text-white shadow-md shadow-pink-100/20"
+                    : "text-slate-600 hover:text-pink-600 hover:bg-black/5"
                 }`}
               >
                 <Edit3 className="w-3.5 h-3.5" />
@@ -2589,10 +2650,11 @@ export default function App() {
               </button>
               <button
                 onClick={() => setActiveTab("settings")}
-                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-lg text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
+                style={activeTab === "settings" ? { backgroundColor: "var(--accent-color, #db2777)" } : {}}
+                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
                   activeTab === "settings"
-                    ? "bg-gradient-to-r from-pink-500 to-rose-450 text-white shadow-sm"
-                    : "text-slate-600 hover:text-pink-600 hover:bg-pink-50/40"
+                    ? "text-white shadow-md shadow-pink-100/20"
+                    : "text-slate-600 hover:text-pink-600 hover:bg-black/5"
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
@@ -2600,10 +2662,11 @@ export default function App() {
               </button>
               <button
                 onClick={() => setActiveTab("memos")}
-                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-lg text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
+                style={activeTab === "memos" ? { backgroundColor: "var(--accent-color, #db2777)" } : {}}
+                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
                   activeTab === "memos"
-                    ? "bg-gradient-to-r from-pink-500 to-rose-450 text-white shadow-sm"
-                    : "text-slate-600 hover:text-pink-600 hover:bg-pink-50/40"
+                    ? "text-white shadow-md shadow-pink-100/20"
+                    : "text-slate-600 hover:text-pink-600 hover:bg-black/5"
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
@@ -2611,10 +2674,11 @@ export default function App() {
               </button>
               <button
                 onClick={() => setActiveTab("theme")}
-                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-lg text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
+                style={activeTab === "theme" ? { backgroundColor: "var(--accent-color, #db2777)" } : {}}
+                className={`flex-1 min-w-[90px] py-2.5 px-3 rounded-xl text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 ${
                   activeTab === "theme"
-                    ? "bg-gradient-to-r from-pink-500 to-rose-450 text-white shadow-sm"
-                    : "text-slate-600 hover:text-pink-600 hover:bg-pink-50/40"
+                    ? "text-white shadow-md shadow-pink-100/20"
+                    : "text-slate-600 hover:text-pink-600 hover:bg-black/5"
                 }`}
               >
                 <Compass className="w-3.5 h-3.5" />

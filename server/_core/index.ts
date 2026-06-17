@@ -4,7 +4,7 @@ import { setupVite, serveStatic } from "./vite";
 import { registerOAuthRoutes } from "./oauth";
 import { sdk } from "./sdk";
 import { COOKIE_NAME } from "../../shared/const";
-import { getDb, initLogs, ensureTablesInitialized, getUserByOpenId, upsertUser, updateUserPremiumStatus } from "../db";
+import { getDb, initLogs, ensureTablesInitialized, getUserByOpenId, upsertUser, updateUserPremiumStatus, updateUserPreferences } from "../db";
 import { users, novels, plots, characters, episodes, settings, mementos } from "../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -91,23 +91,27 @@ app.use(async (req: any, res, next) => {
               loginMethod: isSandbox ? "sandbox" : "google",
               lastSignedIn: new Date(),
             });
-            if (isSandbox) {
-              await updateUserPremiumStatus(session.openId, true);
-            }
             req.user = {
               ...session,
-              isPremium: isSandbox,
+              isPremium: false,
+              theme: "light",
+              customBg: "",
+              customCard: "",
+              customText: "",
+              customBorder: "",
+              customAccent: "",
             };
           } else {
-            // Also enforce sandbox users are premium in case database state got modified externally
             const isSandbox = session.openId.includes("sandbox");
-            if (isSandbox && !dbUser.isPremium) {
-              await updateUserPremiumStatus(session.openId, true);
-              dbUser.isPremium = true;
-            }
             req.user = {
               ...session,
-              isPremium: !!dbUser.isPremium,
+              isPremium: isSandbox ? false : !!dbUser.isPremium,
+              theme: dbUser.theme || "light",
+              customBg: dbUser.customBg || "",
+              customCard: dbUser.customCard || "",
+              customText: dbUser.customText || "",
+              customBorder: dbUser.customBorder || "",
+              customAccent: dbUser.customAccent || "",
             };
           }
         } catch (dbErr) {
@@ -1129,6 +1133,32 @@ app.post("/api/upgrade-premium", requireAuth, async (req: any, res) => {
   } catch (e: any) {
     console.error("[API Debug] Failed to upgrade premium:", e);
     return res.status(500).json({ error: "アップグレード処理に失敗しました。" });
+  }
+});
+
+app.post("/api/user/preferences", requireAuth, async (req: any, res) => {
+  try {
+    const { theme, customBg, customCard, customText, customBorder, customAccent } = req.body;
+    await updateUserPreferences(req.user.openId, {
+      theme,
+      customBg,
+      customCard,
+      customText,
+      customBorder,
+      customAccent,
+    });
+    if (req.user) {
+      if (theme) req.user.theme = theme;
+      if (customBg !== undefined) req.user.customBg = customBg;
+      if (customCard !== undefined) req.user.customCard = customCard;
+      if (customText !== undefined) req.user.customText = customText;
+      if (customBorder !== undefined) req.user.customBorder = customBorder;
+      if (customAccent !== undefined) req.user.customAccent = customAccent;
+    }
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error("[API Debug] Failed to save user preferences:", err);
+    return res.status(500).json({ error: "設定の保存に失敗しました。" });
   }
 });
 

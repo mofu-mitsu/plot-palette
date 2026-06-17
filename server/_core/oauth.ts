@@ -58,10 +58,8 @@ export function registerOAuthRoutes(app: Express) {
           loginMethod: "sandbox",
           lastSignedIn: new Date(),
         });
-        // 常にプレミアム特典をゲストユーザーに最初から付与する 🎨👑
-        await db.updateUserPremiumStatus(openId, true);
       } catch (dbError) {
-        console.error("[Sandbox Auth] DB Upsert/Premium Sync Failed, continuing with in-memory fallback:", dbError);
+        console.error("[Sandbox Auth] DB Upsert Guest Synced Failed, continuing with in-memory fallback:", dbError);
       }
 
       const sessionToken = await sdk.createSessionToken(openId, {

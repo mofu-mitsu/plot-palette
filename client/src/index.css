@@ -130,7 +130,13 @@
 .palette-parchment .bg-pink-500, .palette-parchment .bg-pink-600,
 .palette-night .bg-pink-500, .palette-night .bg-pink-600,
 .palette-manuscript .bg-pink-500, .palette-manuscript .bg-pink-600,
-.palette-custom .bg-pink-500, .palette-custom .bg-pink-600 {
+.palette-custom .bg-pink-500, .palette-custom .bg-pink-600,
+.palette-sakura .from-pink-500, .palette-sakura .from-pink-600,
+.palette-parchment .from-pink-500, .palette-parchment .from-pink-600,
+.palette-night .from-pink-500, .palette-night .from-pink-600,
+.palette-manuscript .from-pink-500, .palette-manuscript .from-pink-600,
+.palette-custom .from-pink-500, .palette-custom .from-pink-600 {
+  background-image: none !important;
   background-color: var(--accent-color) !important;
 }
 

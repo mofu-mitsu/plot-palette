@@ -7,6 +7,12 @@ export const users = pgTable("palette_users", {
   loginMethod: text("login_method"), // google or sandbox
   isPremium: boolean("is_premium").default(false),
   lastSignedIn: timestamp("last_signed_in"),
+  theme: text("theme").default("light"),
+  customBg: text("custom_bg"),
+  customCard: text("custom_card"),
+  customText: text("custom_text"),
+  customBorder: text("custom_border"),
+  customAccent: text("custom_accent"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

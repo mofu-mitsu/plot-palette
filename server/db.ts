@@ -75,6 +75,12 @@ async function initializeTables(sqlClient: any) {
             login_method TEXT,
             is_premium BOOLEAN DEFAULT false,
             last_signed_in TIMESTAMP,
+            theme TEXT DEFAULT 'light',
+            custom_bg TEXT,
+            custom_card TEXT,
+            custom_text TEXT,
+            custom_border TEXT,
+            custom_accent TEXT,
             created_at TIMESTAMP DEFAULT NOW()
           );
         `);
@@ -175,9 +181,15 @@ async function initializeTables(sqlClient: any) {
         // Synchronize and heal the column schema as a safe post-initialization step
         try {
           await sqlClient`ALTER TABLE palette_users ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT false;`;
-          console.log("[DB Debug] ✔ Verified check/add option `is_premium` on `palette_users`.");
+          await sqlClient`ALTER TABLE palette_users ADD COLUMN IF NOT EXISTS theme TEXT DEFAULT 'light';`;
+          await sqlClient`ALTER TABLE palette_users ADD COLUMN IF NOT EXISTS custom_bg TEXT;`;
+          await sqlClient`ALTER TABLE palette_users ADD COLUMN IF NOT EXISTS custom_card TEXT;`;
+          await sqlClient`ALTER TABLE palette_users ADD COLUMN IF NOT EXISTS custom_text TEXT;`;
+          await sqlClient`ALTER TABLE palette_users ADD COLUMN IF NOT EXISTS custom_border TEXT;`;
+          await sqlClient`ALTER TABLE palette_users ADD COLUMN IF NOT EXISTS custom_accent TEXT;`;
+          console.log("[DB Debug] ✔ Verified check/add option `is_premium` and theme columns on `palette_users`.");
         } catch (err: any) {
-          console.warn("[DB Debug] Optional is_premium col healing warning:", err.message || err);
+          console.warn("[DB Debug] Optional is_premium and theme col healing warning:", err.message || err);
         }
 
         initialized = true;
@@ -324,5 +336,31 @@ export async function updateUserPremiumStatus(openId: string, isPremium: boolean
     console.log(`[DB Debug] Updated isPremium for user '${openId}' to ${isPremium}`);
   } catch (err) {
     console.error(`[DB Debug] updateUserPremiumStatus failed:`, err);
+  }
+}
+
+export async function updateUserPreferences(openId: string, prefs: {
+  theme?: string;
+  customBg?: string;
+  customCard?: string;
+  customText?: string;
+  customBorder?: string;
+  customAccent?: string;
+}) {
+  const dbConnection = getDb();
+  if (!dbConnection) return;
+  try {
+    // Keep internal matching
+    await dbConnection.update(users).set({
+      theme: prefs.theme,
+      customBg: prefs.customBg,
+      customCard: prefs.customCard,
+      customText: prefs.customText,
+      customBorder: prefs.customBorder,
+      customAccent: prefs.customAccent,
+    }).where(eq(users.openId, openId));
+    console.log(`[DB Debug] Updated preferences for user '${openId}'`);
+  } catch (err) {
+    console.error(`[DB Debug] updateUserPreferences failed:`, err);
   }
 }
