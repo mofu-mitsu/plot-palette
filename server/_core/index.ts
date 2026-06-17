@@ -83,18 +83,28 @@ app.use(async (req: any, res, next) => {
           const dbUser = await getUserByOpenId(session.openId);
           if (!dbUser) {
             console.log(`[Auth Middleware] Session active but user '${session.openId}' is missing in DB. Running auto-heal upsert...`);
+            const isSandbox = session.openId.includes("sandbox");
             await upsertUser({
               openId: session.openId,
               name: session.name || "ユーザー",
               email: null,
-              loginMethod: session.openId.startsWith("google:") ? "google" : "sandbox",
+              loginMethod: isSandbox ? "sandbox" : "google",
               lastSignedIn: new Date(),
             });
+            if (isSandbox) {
+              await updateUserPremiumStatus(session.openId, true);
+            }
             req.user = {
               ...session,
-              isPremium: false,
+              isPremium: isSandbox,
             };
           } else {
+            // Also enforce sandbox users are premium in case database state got modified externally
+            const isSandbox = session.openId.includes("sandbox");
+            if (isSandbox && !dbUser.isPremium) {
+              await updateUserPremiumStatus(session.openId, true);
+              dbUser.isPremium = true;
+            }
             req.user = {
               ...session,
               isPremium: !!dbUser.isPremium,

@@ -125,34 +125,44 @@
   border-color: var(--border-color) !important;
 }
 
-/* いつもアクセント背景・テキストを反映 (カスタムテーマ調色などをサポート) */
-.palette-custom .bg-pink-500,
-.palette-custom .bg-pink-600 {
+/* いつもアクセント背景・テキストを完璧に選択パレットの色へ反映 (桜、羊皮紙、群青、原稿、カスタム) */
+.palette-sakura .bg-pink-500, .palette-sakura .bg-pink-600,
+.palette-parchment .bg-pink-500, .palette-parchment .bg-pink-600,
+.palette-night .bg-pink-500, .palette-night .bg-pink-600,
+.palette-manuscript .bg-pink-500, .palette-manuscript .bg-pink-600,
+.palette-custom .bg-pink-500, .palette-custom .bg-pink-600 {
   background-color: var(--accent-color) !important;
 }
 
-.palette-custom .text-pink-500,
-.palette-custom .text-pink-600,
-.palette-custom .text-pink-700 {
+.palette-sakura .text-pink-500, .palette-sakura .text-pink-600, .palette-sakura .text-pink-700,
+.palette-parchment .text-pink-500, .palette-parchment .text-pink-600, .palette-parchment .text-pink-700,
+.palette-night .text-pink-500, .palette-night .text-pink-600, .palette-night .text-pink-700,
+.palette-manuscript .text-pink-500, .palette-manuscript .text-pink-600, .palette-manuscript .text-pink-700,
+.palette-custom .text-pink-500, .palette-custom .text-pink-600, .palette-custom .text-pink-700 {
   color: var(--accent-color) !important;
 }
 
-.palette-custom .border-pink-100,
-.palette-custom .border-pink-100\/55,
-.palette-custom .border-pink-100\/70,
-.palette-custom .border-pink-100\/30 {
+.palette-sakura .border-pink-100, .palette-sakura .border-pink-100\/55, .palette-sakura .border-pink-100\/70, .palette-sakura .border-pink-100\/30,
+.palette-parchment .border-pink-100, .palette-parchment .border-pink-100\/55, .palette-parchment .border-pink-100\/70, .palette-parchment .border-pink-100\/30,
+.palette-night .border-pink-100, .palette-night .border-pink-100\/55, .palette-night .border-pink-100\/70, .palette-night .border-pink-100\/30,
+.palette-manuscript .border-pink-100, .palette-manuscript .border-pink-100\/55, .palette-manuscript .border-pink-100\/70, .palette-manuscript .border-pink-100\/30,
+.palette-custom .border-pink-100, .palette-custom .border-pink-100\/55, .palette-custom .border-pink-100\/70, .palette-custom .border-pink-100\/30 {
   border-color: var(--accent-light) !important;
 }
 
-.palette-custom .border-pink-200,
-.palette-custom .border-pink-205,
-.palette-custom .border-pink-300,
-.palette-custom .border-pink-400 {
+.palette-sakura .border-pink-200, .palette-sakura .border-pink-205, .palette-sakura .border-pink-300, .palette-sakura .border-pink-400,
+.palette-parchment .border-pink-200, .palette-parchment .border-pink-205, .palette-parchment .border-pink-300, .palette-parchment .border-pink-400,
+.palette-night .border-pink-200, .palette-night .border-pink-205, .palette-night .border-pink-300, .palette-night .border-pink-400,
+.palette-manuscript .border-pink-200, .palette-manuscript .border-pink-205, .palette-manuscript .border-pink-300, .palette-manuscript .border-pink-400,
+.palette-custom .border-pink-200, .palette-custom .border-pink-205, .palette-custom .border-pink-300, .palette-custom .border-pink-400 {
   border-color: var(--accent-color) !important;
 }
 
-.palette-custom .bg-pink-50,
-.palette-custom .bg-pink-100 {
+.palette-sakura .bg-pink-50, .palette-sakura .bg-pink-100,
+.palette-parchment .bg-pink-50, .palette-parchment .bg-pink-100,
+.palette-night .bg-pink-50, .palette-night .bg-pink-100,
+.palette-manuscript .bg-pink-50, .palette-manuscript .bg-pink-100,
+.palette-custom .bg-pink-50, .palette-custom .bg-pink-100 {
   background-color: var(--accent-light) !important;
 }
 

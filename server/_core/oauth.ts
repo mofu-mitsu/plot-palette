@@ -44,7 +44,8 @@ async function getGoogleUserInfo(accessToken: string) {
 export function registerOAuthRoutes(app: Express) {
   app.get("/api/auth/sandbox", async (req: Request, res: Response) => {
     try {
-      const deviceId = req.query.device_id && typeof req.query.device_id === "string" ? req.query.device_id : "test-user-12345";
+      const rawDeviceId = req.query.device_id && typeof req.query.device_id === "string" ? req.query.device_id : "";
+      const deviceId = rawDeviceId ? rawDeviceId : `sb-guest-${Math.random().toString(36).substring(2, 9)}`;
       const openId = `google:sandbox-${deviceId}`;
       const name = "プロットクリエイター (ゲスト)";
       const email = `sandbox-${deviceId}@example.com`;
@@ -57,8 +58,10 @@ export function registerOAuthRoutes(app: Express) {
           loginMethod: "sandbox",
           lastSignedIn: new Date(),
         });
+        // 常にプレミアム特典をゲストユーザーに最初から付与する 🎨👑
+        await db.updateUserPremiumStatus(openId, true);
       } catch (dbError) {
-        console.error("[Sandbox Auth] DB Upsert Failed, continuing with in-memory fallback:", dbError);
+        console.error("[Sandbox Auth] DB Upsert/Premium Sync Failed, continuing with in-memory fallback:", dbError);
       }
 
       const sessionToken = await sdk.createSessionToken(openId, {

@@ -386,6 +386,7 @@ export default function App() {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<"none" | "novel_long" | "novel_short" | "free">("none");
   const [showPaletteMenu, setShowPaletteMenu] = useState(false);
+  const [showPaletteModal, setShowPaletteModal] = useState(false);
 
   // Free Color Palette Customization States (1600万色)
   const [customBg, setCustomBg] = useState(() => localStorage.getItem("palette_custom_bg") || "#fff5f6");
@@ -1049,44 +1050,14 @@ export default function App() {
           toast.success("PDFをダウンロードしました！");
         };
 
-        // スマホなどで確実にダウンロード・共有させるためのBlob処理
+        // すべてのブラウザ環境で一律に Blob A-link による直接ダウンロードを発行する
         const blob = pdf.output("blob");
-        
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const filename = `${episode.title || "episode"}.pdf`;
+        triggerDownload(blob, filename);
 
-        // 🚀 IMPROVEMENT: デスクトップ環境では Web API navigator.share をスキップして直接 PDF をダウンロードさせる。
-        // モバイル（スマホやタブレット）の場合のみ、別タブプレビューや共有メニューを優遇する。
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         if (isMobile) {
-          try {
-            const pdfDataUri = pdf.output("datauristring");
-            const newWindow = window.open();
-            if (newWindow) {
-              newWindow.document.write(`
-                <html>
-                  <head>
-                    <title>${episode.title || "PDF プレビュー"}</title>
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <style>
-                      html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background-color:#333; }
-                      iframe { border:none; width:100%; height:100%; }
-                    </style>
-                  </head>
-                  <body>
-                    <iframe src="${pdfDataUri}"></iframe>
-                  </body>
-                </html>
-              `);
-              newWindow.document.close();
-              toast.success("PDFを表示しました。右上の共有/保存メニューをご利用ください 📂✨");
-            } else {
-              triggerDownload(blob, `${episode.title || "episode"}.pdf`);
-            }
-          } catch (e) {
-            triggerDownload(blob, `${episode.title || "episode"}.pdf`);
-          }
-        } else {
-          // PCの場合は迷わず直接ダウンロード（aタグ click 発火）！
-          triggerDownload(blob, `${episode.title || "episode"}.pdf`);
+          toast.info("📱 スマホ環境でPDFダウンロードが開始されない場合は、文字数が少なめの短編への分割や、執筆スタジオからクリップボードへの全コピー・保存をお試しください！", { duration: 6000 });
         }
 
       } catch (err) {
@@ -2174,171 +2145,16 @@ export default function App() {
             </button>
           </div>
 
-          {/* パレットテーマ着せ替えトグル (おしゃれドロップダウン) */}
-          <div className="relative hidden md:block">
+          {/* パレットテーマ着せ替えトリガー (全画面＆レスポンシブな共通モーダルへ統合 🎨) */}
+          <div className="relative">
             <button
-              onClick={() => setShowPaletteMenu(!showPaletteMenu)}
+              onClick={() => setShowPaletteModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-extrabold bg-slate-50 hover:bg-slate-100 border border-slate-200/60 shadow-sm transition text-slate-700"
               title="カラーパレットを変更"
             >
               <Palette className="w-3.5 h-3.5 text-pink-500 animate-spin-slow" />
               <span>パレット🎨</span>
             </button>
-
-            {/* パレットテーマPopoverメニュー */}
-            {showPaletteMenu && (
-              <div 
-                className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200/80 p-4 z-50 text-left animate-in fade-in slide-in-from-top-2 duration-150"
-                style={{ color: "#1f2937" }}
-              >
-                <div className="flex justify-between items-center mb-2">
-                  <h5 className="text-[10px] font-black text-rose-800 tracking-wider uppercase">創作パレットを染める</h5>
-                  <button 
-                    onClick={() => setShowPaletteMenu(false)}
-                    className="text-[10px] text-slate-400 hover:text-slate-600"
-                  >
-                    閉じる
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  {[
-                    { id: "light", name: "ライト(昼)", bg: "bg-white", text: "text-slate-700" },
-                    { id: "dark", name: "ダーク(夜)", bg: "bg-slate-800", text: "text-white" },
-                    { id: "sakura", name: "桜パレット🌸", bg: "bg-pink-100", text: "text-pink-800", premium: true },
-                    { id: "parchment", name: "羊皮紙🕯️", bg: "bg-amber-50", text: "text-amber-800", premium: true },
-                    { id: "night", name: "夜空群青🌃", bg: "bg-indigo-950", text: "text-indigo-100", premium: true },
-                    { id: "manuscript", name: "原稿用紙🌿", bg: "bg-emerald-50", text: "text-emerald-800", premium: true },
-                    { id: "custom", name: "1600万色カスタム🎨", bg: "bg-gradient-to-tr from-pink-200 via-rose-200 to-amber-200", text: "text-rose-800", premium: true }
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => {
-                        handleSelectTheme(t.id as any);
-                      }}
-                      className={`flex items-center gap-1.5 px-2 py-2 rounded-xl text-[11px] font-bold border transition ${
-                        themeState === t.id 
-                          ? "border-pink-500 bg-pink-50/50 text-pink-700" 
-                          : "border-slate-100 hover:bg-slate-50 text-slate-600"
-                      }`}
-                    >
-                      <span className={`w-3.5 h-3.5 rounded-full border border-slate-200 shrink-0 ${t.bg}`} />
-                      <span className="truncate">{t.name}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* カスタムカラー調色パネル */}
-                {themeState === "custom" && isPremium && (
-                  <div className="pt-2.5 border-t border-slate-100 space-y-2.5 text-slate-700">
-                    <div className="flex items-center justify-between text-[10px] font-bold text-pink-600">
-                      <span>✨ 1600万色調色パレット</span>
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          setCustomBg("#fff5f6");
-                          setCustomCard("#ffffff");
-                          setCustomText("#4c0519");
-                          setCustomBorder("#fecdd3");
-                          setCustomAccent("#db2777");
-                          localStorage.setItem("palette_custom_bg", "#fff5f6");
-                          localStorage.setItem("palette_custom_card", "#ffffff");
-                          localStorage.setItem("palette_custom_text", "#4c0519");
-                          localStorage.setItem("palette_custom_border", "#fecdd3");
-                          localStorage.setItem("palette_custom_accent", "#db2777");
-                        }}
-                        className="text-[9px] text-slate-400 hover:text-pink-600 underline font-semibold"
-                      >
-                        リセット
-                      </button>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 text-[9px] font-bold text-slate-600">
-                      <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                        <input 
-                          type="color" 
-                          value={customBg} 
-                          onChange={(e) => {
-                            setCustomBg(e.target.value);
-                            localStorage.setItem("palette_custom_bg", e.target.value);
-                          }}
-                          className="w-4 h-4 rounded cursor-pointer border-0 p-0" 
-                        />
-                        <span>全体の背景</span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                        <input 
-                          type="color" 
-                          value={customCard} 
-                          onChange={(e) => {
-                            setCustomCard(e.target.value);
-                            localStorage.setItem("palette_custom_card", e.target.value);
-                          }}
-                          className="w-4 h-4 rounded cursor-pointer border-0 p-0" 
-                        />
-                        <span>カード背景</span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                        <input 
-                          type="color" 
-                          value={customText} 
-                          onChange={(e) => {
-                            setCustomText(e.target.value);
-                            localStorage.setItem("palette_custom_text", e.target.value);
-                          }}
-                          className="w-4 h-4 rounded cursor-pointer border-0 p-0" 
-                        />
-                        <span>文字の色</span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                        <input 
-                          type="color" 
-                          value={customBorder} 
-                          onChange={(e) => {
-                            setCustomBorder(e.target.value);
-                            localStorage.setItem("palette_custom_border", e.target.value);
-                          }}
-                          className="w-4 h-4 rounded cursor-pointer border-0 p-0" 
-                        />
-                        <span>枠線の色</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100 text-[9px] font-bold text-slate-600">
-                      <input 
-                        type="color" 
-                        value={customAccent} 
-                        onChange={(e) => {
-                          setCustomAccent(e.target.value);
-                          localStorage.setItem("palette_custom_accent", e.target.value);
-                        }}
-                        className="w-4 h-4 rounded cursor-pointer border-0 p-0" 
-                      />
-                      <span className="flex-1">テーマアクセント色</span>
-                    </div>
-                  </div>
-                )}
-
-                {themeState === "custom" && !isPremium && (
-                  <div className="pt-2 border-t border-slate-100 text-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowPaletteMenu(false);
-                        setShowPremiumModal(true);
-                      }}
-                      className="text-[9px] bg-amber-500 hover:bg-amber-600 text-white font-bold py-1 px-2 rounded-full inline-block tracking-wide transition animate-pulse"
-                    >
-                      👑 カスタム調色はプレミアム特典
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* プレミアム快適化アップグレードボタン */}
@@ -2358,18 +2174,14 @@ export default function App() {
             <span className="text-xs font-semibold" style={{ color: "var(--text-main)" }}>
               <strong className="text-pink-600 font-extrabold">{displayName}</strong> さん
             </span>
-            <button
-              onClick={() => { setShowDbStatusModal(true); checkDbStatus(); }}
-              className="flex items-center gap-1 justify-end mt-0.5 hover:opacity-80 transition cursor-pointer text-left focus:outline-none"
-              title="クラウド同期診断を開く"
-            >
+            <div className="flex items-center gap-1.5 justify-end mt-0.5">
               <span className={`w-1.5 h-1.5 rounded-full ${
-                syncStatus === "synced" ? "bg-emerald-500 animate-pulse" : "bg-pink-400"
+                syncStatus === "synced" ? "bg-emerald-500 animate-pulse" : "bg-amber-400"
               }`} />
-              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider underline decoration-dotted decoration-slate-300">
-                {syncStatus === "synced" ? "同期完了 (診断 📡)" : syncStatus === "saving" ? "同調中..." : "オフライン (診断 📡)"}
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">
+                {syncStatus === "synced" ? "クラウド同期済 ✨" : syncStatus === "saving" ? "クラウド同調中..." : "ローカル保存中"}
               </span>
-            </button>
+            </div>
           </div>
 
           {/* 全文検索ボタン */}
@@ -2477,16 +2289,7 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() => { setShowDbStatusModal(true); checkDbStatus(); setShowMobileMenu(false); }}
-                className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-violet-50 hover:text-violet-600 transition text-left"
-              >
-                <CloudLightning className="w-4 h-4 text-violet-500 shrink-0" />
-                <span>クラウド同期診断 📡</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setShowPaletteMenu(!showPaletteMenu); setShowMobileMenu(false); }}
+                onClick={() => { setShowPaletteModal(true); setShowMobileMenu(false); }}
                 className="flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-pink-50 hover:text-pink-600 transition text-left"
               >
                 <Palette className="w-4 h-4 text-pink-500 shrink-0" />
@@ -2732,6 +2535,15 @@ export default function App() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] bg-pink-500 text-white font-extrabold px-2.5 py-0.5 rounded-full shadow-sm">執筆プロジェクト</span>
                   <span className="text-[10px] bg-slate-100 text-slate-650 px-2 py-0.5 rounded font-mono font-bold border border-slate-200">目標: {selectedNovel.wordGoal || 50000} 字</span>
+                  {isSubDataLoading && (
+                    <span 
+                      className="text-[10px] text-pink-600 font-extrabold px-2 py-0.5 rounded-full border border-pink-205 flex items-center gap-1.5 animate-pulse"
+                      style={{ color: 'var(--accent-color, #db2777)', borderColor: 'var(--accent-color, #db2777)', backgroundColor: 'var(--accent-light, #fff5f6)' }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-ping" style={{ backgroundColor: 'var(--accent-color, #db2777)' }} />
+                      <span>クラウド同調中... 🌸</span>
+                    </span>
+                  )}
                 </div>
                 <h3 className="text-xl font-sans font-extrabold mt-1 text-slate-800">{selectedNovel.title}</h3>
                 <p className="text-slate-500 text-xs mt-1 leading-relaxed max-w-3xl">
@@ -2810,7 +2622,7 @@ export default function App() {
               </button>
             </div>
 
-            {isSubDataLoading ? (
+            {false ? (
               <div className="bg-white rounded-3xl p-12 text-center shadow-sm border border-pink-100/30 flex flex-col items-center justify-center space-y-4 min-h-[350px] select-none scale-95 duration-300 animate-in fade-in" style={{ borderColor: 'var(--border-color)' }}>
                 <div className="relative flex items-center justify-center">
                   <div className="absolute w-12 h-12 border-4 border-pink-500/10 border-t-pink-500 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent-color)' }}></div>
@@ -4270,6 +4082,177 @@ export default function App() {
       )}
 
       {/* ========================================================
+         MODALS: 着せ替えパレット選択モーダル (スマホ完全対応 🎨)
+         ======================================================== */}
+      {showPaletteModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white text-slate-800 rounded-3xl w-full max-w-md shadow-2xl p-6 border border-slate-200 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="text-base font-bold text-slate-800 flex items-center gap-1.5 font-sans">
+                <Palette className="text-pink-500 w-5 h-5 animate-spin-slow" />
+                <span>アトリエの着せ替えパレット🎨</span>
+              </h4>
+              <button
+                onClick={() => setShowPaletteModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[11px] font-bold text-slate-400 mb-4 tracking-wider leading-relaxed">
+              気分にあわせて、執筆スタジオや相関図などの色合いを変えられます。1600万色カスタムはプレミアム専用です！
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {[
+                { id: "light", name: "ライト(昼) ☀️", bg: "bg-white", text: "text-slate-700" },
+                { id: "dark", name: "ダーク(夜) 🌙", bg: "bg-slate-800", text: "text-white" },
+                { id: "sakura", name: "桜パレット🌸", bg: "bg-pink-100", text: "text-pink-800", premium: true },
+                { id: "parchment", name: "羊皮紙 🕯️", bg: "bg-amber-50", text: "text-amber-800", premium: true },
+                { id: "night", name: "夜空群青 🌃", bg: "bg-indigo-950", text: "text-indigo-100", premium: true },
+                { id: "manuscript", name: "原稿用紙 🌿", bg: "bg-emerald-50", text: "text-emerald-800", premium: true },
+                { id: "custom", name: "1600万色カスタム 🎨", bg: "bg-gradient-to-tr from-pink-200 via-rose-200 to-amber-200", text: "text-rose-800", premium: true }
+              ].map((t) => {
+                const isLocked = t.premium && !isPremium;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      if (isLocked) {
+                        toast.error("👑 1600万色カスタムや限定パレットはプレミアム専用機能です！");
+                        setShowPremiumModal(true);
+                      } else {
+                        handleSelectTheme(t.id as any);
+                      }
+                    }}
+                    className={`relative flex items-center gap-2 px-3 py-2 rounded-2xl text-xs font-black border transition ${
+                      themeState === t.id 
+                        ? "border-pink-500 bg-pink-50/50 text-pink-700 font-extrabold" 
+                        : "border-slate-200 hover:bg-slate-50 text-slate-600"
+                    }`}
+                  >
+                    <span className={`w-4 h-4 rounded-full border border-slate-200 shrink-0 ${t.bg}`} />
+                    <span className="truncate flex-1 text-left">{t.name}</span>
+                    {isLocked && (
+                      <span className="text-[9px] bg-amber-500/10 text-amber-600 font-black px-1.5 py-0.5 rounded-full scale-90 origin-right shrink-0">
+                        👑
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* カスタムカラー調色パネル */}
+            {themeState === "custom" && isPremium && (
+              <div className="pt-4 border-t border-slate-100 space-y-3 shadow-inner p-3 rounded-2xl bg-slate-50/60">
+                <div className="flex items-center justify-between text-xs font-black text-pink-600">
+                  <span>✨ 1600万色調色パレット</span>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setCustomBg("#fff5f6");
+                      setCustomCard("#ffffff");
+                      setCustomText("#4c0519");
+                      setCustomBorder("#fecdd3");
+                      setCustomAccent("#db2777");
+                      localStorage.setItem("palette_custom_bg", "#fff5f6");
+                      localStorage.setItem("palette_custom_card", "#ffffff");
+                      localStorage.setItem("palette_custom_text", "#4c0519");
+                      localStorage.setItem("palette_custom_border", "#fecdd3");
+                      localStorage.setItem("palette_custom_accent", "#db2777");
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-pink-600 underline font-semibold"
+                  >
+                    標準値に戻す
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-600">
+                  <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-100">
+                    <input 
+                      type="color" 
+                      value={customBg} 
+                      onChange={(e) => {
+                        setCustomBg(e.target.value);
+                        localStorage.setItem("palette_custom_bg", e.target.value);
+                      }}
+                      className="w-5 h-5 rounded cursor-pointer border-0 p-0" 
+                    />
+                    <span>全体の背景</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-100">
+                    <input 
+                      type="color" 
+                      value={customCard} 
+                      onChange={(e) => {
+                        setCustomCard(e.target.value);
+                        localStorage.setItem("palette_custom_card", e.target.value);
+                      }}
+                      className="w-5 h-5 rounded cursor-pointer border-0 p-0" 
+                    />
+                    <span>カード背景</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-100">
+                    <input 
+                      type="color" 
+                      value={customText} 
+                      onChange={(e) => {
+                        setCustomText(e.target.value);
+                        localStorage.setItem("palette_custom_text", e.target.value);
+                      }}
+                      className="w-5 h-5 rounded cursor-pointer border-0 p-0" 
+                    />
+                    <span>文字の色</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-100">
+                    <input 
+                      type="color" 
+                      value={customBorder} 
+                      onChange={(e) => {
+                        setCustomBorder(e.target.value);
+                        localStorage.setItem("palette_custom_border", e.target.value);
+                      }}
+                      className="w-5 h-5 rounded cursor-pointer border-0 p-0" 
+                    />
+                    <span>枠線の色</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-100 text-[10px] font-bold text-slate-600">
+                  <input 
+                    type="color" 
+                    value={customAccent} 
+                    onChange={(e) => {
+                      setCustomAccent(e.target.value);
+                      localStorage.setItem("palette_custom_accent", e.target.value);
+                    }}
+                    className="w-5 h-5 rounded cursor-pointer border-0 p-0" 
+                  />
+                  <span className="flex-1">テーマアクセント色 (ボタン/アイコン)</span>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 pt-4 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPaletteModal(false)}
+                className="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-6 rounded-full text-xs transition shadow-md shadow-pink-100 cursor-pointer"
+              >
+                この色を適用する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
          MODALS: 小説作成・編集モーダル (パレット決定ボタンを完全に担保)
          ======================================================== */}
       {showNovelModal && (
@@ -5523,33 +5506,39 @@ export default function App() {
 
       {/* --- 印刷/PDFエクスポート専用フルスクリーンDOM (印刷時以外は非表示) --- */}
       {isPrintingMode && printingEpisode && (
-        <div className="fixed inset-0 bg-white z-[9999] overflow-auto p-12 text-slate-900 block" id="print-canvas-area" style={{ color: "#111" }}>
-          <div className="max-w-3xl mx-auto space-y-6">
-            <h1 className="text-3xl font-black font-serif pb-4 border-b-2 border-dashed border-red-200 tracking-wide text-rose-900 flex justify-between items-center text-left">
-              <span>{printingEpisode.title || "無題"}</span>
-              <button 
-                onClick={() => {
-                  setIsPrintingMode(false);
-                  setPrintingEpisode(null);
-                }}
-                className="print:hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-3 py-1.5 rounded-xl border border-slate-200"
-              >
-                印刷モードを抜ける ↩
-              </button>
-            </h1>
-            <div className="text-base leading-loose font-serif tracking-wider whitespace-pre-wrap text-justify py-4 min-h-[500px]">
-              {(printingEpisode.body || "").split("\n").map((para, idx) => (
-                <p key={idx} className="mb-4 text-[16px] leading-[2.3]">
-                  {para}
-                </p>
-              ))}
-            </div>
-            
-            {!isPremium && (
-              <div className="mt-12 text-center text-[10px] text-slate-400 font-sans tracking-widest border-t border-slate-100 pt-4">
-                 Created by 創作支援アトリエ Plot Palette
+        <div className="fixed inset-0 bg-white z-[9999] overflow-auto p-12 text-slate-900 block flex flex-col justify-start items-center">
+          <div className="w-full max-w-3xl mb-4 flex justify-end print:hidden">
+            <button 
+              onClick={() => {
+                setIsPrintingMode(false);
+                setPrintingEpisode(null);
+              }}
+              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-4 py-2 rounded-xl border border-slate-200 shadow-sm transition"
+            >
+              印刷プレビューを抜ける ↩
+            </button>
+          </div>
+          
+          {/* キャプチャ対象キャンバス領域 (ボタンなどを完全に分離) */}
+          <div id="print-canvas-area" className="w-full max-w-3xl bg-white p-8" style={{ color: "#111" }}>
+            <div className="space-y-6">
+              <h1 className="text-3xl font-black font-serif pb-4 border-b-2 border-dashed border-rose-200 tracking-wide text-rose-900 text-left">
+                {printingEpisode.title || "無題"}
+              </h1>
+              <div className="text-base leading-loose font-serif tracking-wider whitespace-pre-wrap text-justify py-4 min-h-[500px]">
+                {(printingEpisode.body || "").split("\n").map((para, idx) => (
+                  <p key={idx} className="mb-4 text-[16px] leading-[2.3]">
+                    {para}
+                  </p>
+                ))}
               </div>
-            )}
+              
+              {!isPremium && (
+                <div className="mt-12 text-center text-[10px] text-slate-400 font-sans tracking-widest border-t border-slate-100 pt-4">
+                   Created by 創作支援アトリエ Plot Palette
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
