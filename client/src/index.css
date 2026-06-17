@@ -99,7 +99,12 @@
 
 .palette-light .border-slate-100, .palette-dark .border-slate-100, .palette-sakura .border-slate-100, .palette-parchment .border-slate-100, .palette-night .border-slate-100, .palette-manuscript .border-slate-100, .palette-custom .border-slate-100,
 .palette-light .border-slate-200, .palette-dark .border-slate-200, .palette-sakura .border-slate-200, .palette-parchment .border-slate-200, .palette-night .border-slate-200, .palette-manuscript .border-slate-200, .palette-custom .border-slate-200,
+.palette-light .border-pink-100, .palette-dark .border-pink-100, .palette-sakura .border-pink-100, .palette-parchment .border-pink-100, .palette-night .border-pink-100, .palette-manuscript .border-pink-100, .palette-custom .border-pink-100,
+.palette-light .border-pink-100\/55, .palette-dark .border-pink-100\/55, .palette-sakura .border-pink-100\/55, .palette-parchment .border-pink-100\/55, .palette-night .border-pink-100\/55, .palette-manuscript .border-pink-100\/55, .palette-custom .border-pink-100\/55,
+.palette-light .border-pink-100\/70, .palette-dark .border-pink-100\/70, .palette-sakura .border-pink-100\/70, .palette-parchment .border-pink-100\/70, .palette-night .border-pink-100\/70, .palette-manuscript .border-pink-100\/70, .palette-custom .border-pink-100\/70,
+.palette-light .border-pink-100\/30, .palette-dark .border-pink-100\/30, .palette-sakura .border-pink-100\/30, .palette-parchment .border-pink-100\/30, .palette-night .border-pink-100\/30, .palette-manuscript .border-pink-100\/30, .palette-custom .border-pink-100\/30,
 .palette-light .border-pink-200, .palette-dark .border-pink-200, .palette-sakura .border-pink-200, .palette-parchment .border-pink-200, .palette-night .border-pink-200, .palette-manuscript .border-pink-200, .palette-custom .border-pink-200,
+.palette-light .border-pink-205, .palette-dark .border-pink-205, .palette-sakura .border-pink-205, .palette-parchment .border-pink-205, .palette-night .border-pink-205, .palette-manuscript .border-pink-205, .palette-custom .border-pink-205,
 .palette-light .border-amber-900\/15, .palette-dark .border-amber-900\/15, .palette-custom .border-amber-900\/15 {
   border-color: var(--border-color) !important;
 }
@@ -132,7 +137,15 @@
   color: var(--accent-color) !important;
 }
 
+.palette-custom .border-pink-100,
+.palette-custom .border-pink-100\/55,
+.palette-custom .border-pink-100\/70,
+.palette-custom .border-pink-100\/30 {
+  border-color: var(--accent-light) !important;
+}
+
 .palette-custom .border-pink-200,
+.palette-custom .border-pink-205,
 .palette-custom .border-pink-300,
 .palette-custom .border-pink-400 {
   border-color: var(--accent-color) !important;

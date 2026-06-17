@@ -44,9 +44,10 @@ async function getGoogleUserInfo(accessToken: string) {
 export function registerOAuthRoutes(app: Express) {
   app.get("/api/auth/sandbox", async (req: Request, res: Response) => {
     try {
-      const openId = "google:sandbox-test-user-12345";
-      const name = "プロットクリエイター";
-      const email = "creator-test@example.com";
+      const deviceId = req.query.device_id && typeof req.query.device_id === "string" ? req.query.device_id : "test-user-12345";
+      const openId = `google:sandbox-${deviceId}`;
+      const name = "プロットクリエイター (ゲスト)";
+      const email = `sandbox-${deviceId}@example.com`;
 
       try {
         await db.upsertUser({

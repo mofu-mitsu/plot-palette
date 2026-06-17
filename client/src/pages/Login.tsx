@@ -1,12 +1,24 @@
 import { Button } from "@/components/ui/button";
 import { getLoginUrl } from "@/const";
 import { Palette, CheckCircle2, Lock, Cloud, Edit3 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 /**
  * Login Page - Google OAuth認証
  */
 
 export default function Login() {
+  const [deviceId, setDeviceId] = useState("");
+
+  useEffect(() => {
+    let id = localStorage.getItem("plot_palette_sandbox_device_id_v2");
+    if (!id) {
+      id = "sb-" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem("plot_palette_sandbox_device_id_v2", id);
+    }
+    setDeviceId(id);
+  }, []);
+
   return (
     <div className="min-h-screen bg-pink-50/30 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -51,7 +63,7 @@ export default function Login() {
               <div className="w-full border-t border-slate-200"></div>
             </div>
 
-            <a href="/api/auth/sandbox" className="block">
+            <a href={`/api/auth/sandbox?device_id=${deviceId}`} className="block">
               <Button
                 size="lg"
                 className="w-full bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-800 rounded-2xl font-bold py-6 text-base transition-all duration-200 shadow-sm flex items-center justify-center gap-2"

@@ -69,6 +69,8 @@ import { jsPDF } from "jspdf";
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isNovelsLoading, setIsNovelsLoading] = useState(false);
+  const [isSubDataLoading, setIsSubDataLoading] = useState(false);
 
   // Core Novel Navigation
   const [rawNovels, setRawNovels] = useState<Novel[]>(() => {
@@ -522,11 +524,15 @@ export default function App() {
           setIsPremium(!!data.user.isPremium);
           localStorage.setItem("plot_palette_premium_v1", data.user.isPremium ? "true" : "false");
         }
+        if (data.user) {
+          setIsNovelsLoading(true);
+        }
         setLoading(false);
       })
       .catch(() => {
         setUser(null);
         setLoading(false);
+        setIsNovelsLoading(false);
       });
   }, []);
 
@@ -852,11 +858,13 @@ export default function App() {
             setNovels(dbNovels);
           }
           setSyncStatus("synced");
+          setIsNovelsLoading(false);
         })
         .catch((err) => {
           console.error("Failed to load novels, loading offline backup", err);
           loadBackupData();
           setSyncStatus("offline");
+          setIsNovelsLoading(false);
           toast.error("サーバーとの通信に失敗しました。オフラインモードで安全に起動しました 🔒");
         });
     }
@@ -872,6 +880,7 @@ export default function App() {
   // Fetch sub collections when selected novel changes with defensive robust array assurance
   useEffect(() => {
     if (selectedNovel) {
+      setIsSubDataLoading(true);
       // 🚀 OPTIMISTIC LOAD CACHE: Load from local backup immediately before fetching to eliminate wait-time completely!
       const userKey = `plot_palette_backup_v2_${user?.openId || "guest"}`;
       const backupStr = localStorage.getItem(userKey);
@@ -917,6 +926,7 @@ export default function App() {
             console.error("Local restore for temporary offline novel failed", e);
           }
         }
+        setIsSubDataLoading(false);
         return;
       }
 
@@ -952,6 +962,7 @@ export default function App() {
           } else {
             setActiveEpisode(null);
           }
+          setIsSubDataLoading(false);
         })
         .catch((err) => {
           console.error("Failed to load novel sub-collections", err);
@@ -961,6 +972,7 @@ export default function App() {
           setWorldSettings([]);
           setMemos([]);
           setSyncStatus("offline");
+          setIsSubDataLoading(false);
         });
     }
   }, [user, selectedNovel]);
@@ -2056,7 +2068,7 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  if (loading) {
+  if (loading || isNovelsLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-pink-50/20">
         <div className="relative flex items-center justify-center">
@@ -2798,9 +2810,21 @@ export default function App() {
               </button>
             </div>
 
-            {/* ========================================================
-               TAB: テーマ・統計
-               ======================================================== */}
+            {isSubDataLoading ? (
+              <div className="bg-white rounded-3xl p-12 text-center shadow-sm border border-pink-100/30 flex flex-col items-center justify-center space-y-4 min-h-[350px] select-none scale-95 duration-300 animate-in fade-in" style={{ borderColor: 'var(--border-color)' }}>
+                <div className="relative flex items-center justify-center">
+                  <div className="absolute w-12 h-12 border-4 border-pink-500/10 border-t-pink-500 rounded-full animate-spin" style={{ borderTopColor: 'var(--accent-color)' }}></div>
+                  <Palette className="text-pink-500 w-5 h-5 animate-pulse" style={{ color: "var(--accent-color)" }} />
+                </div>
+                <p className="text-xs font-sans font-bold text-slate-500 animate-pulse">
+                  アトリエの創作データを美しく整えています... ✨
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* ========================================================
+                             TAB: テーマ・統計
+                             ======================================================== */}
             {activeTab === "theme" && (() => {
               // Calculate simple analytics for stats view
               const charCounts = characters.map(c => {
@@ -4194,6 +4218,8 @@ export default function App() {
                 </div>
 
               </div>
+            )}
+            </>
             )}
 
           </div>
