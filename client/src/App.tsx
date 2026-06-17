@@ -1076,11 +1076,25 @@ export default function App() {
           format: "a4"
         });
         
-        // A4サイズに合わせて縮尺を調整 (幅を合わせる)
+        // A4サイズに合わせて縮尺を調整し、複数ページに綺麗に分割
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        const pageHeight = pdf.internal.pageSize.getHeight(); // 297mm
         
-        pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
+        let heightLeft = pdfHeight;
+        let position = 0;
+
+        // 1ページ目を描画
+        pdf.addImage(imgData, "JPEG", 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
+
+        // 2ページ目以降、はみ出た分をページ分割して描画
+        while (heightLeft > 0) {
+          position = heightLeft - pdfHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, "JPEG", 0, position, pdfWidth, pdfHeight);
+          heightLeft -= pageHeight;
+        }
 
         const triggerDownload = (b: Blob, filename: string) => {
           const blobUrl = URL.createObjectURL(b);
@@ -5638,7 +5652,7 @@ export default function App() {
       {/* フッター */}
       <footer className="mt-16 border-t py-10 transition-all animate-in fade-in duration-200" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-color)" }}>
         <p className="text-center text-xs tracking-wider leading-loose font-bold" style={{ color: "var(--text-muted)" }}>
-          🎨 Plot Palette Pro &copy; 2026 / もふみつ工房 — Designed with Gemini (Je-mi)
+          🎨 Plot Palette Pro &copy; 2026 / もふみつ工房 — Designed
         </p>
         <div className="flex flex-col sm:flex-row justify-center items-center gap-1.5 mt-3 text-[11px] font-bold text-center">
           <span className="text-pink-400">📬 お問い合わせ・ご要望はコチラ ➔</span>
