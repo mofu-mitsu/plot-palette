@@ -171,3 +171,61 @@
     margin-bottom: 0px;
   }
 }
+
+/* 🌟 Rich Editor Grid / Parchment & Accent Propagation 🌟 */
+
+/* 原稿用紙（マヌスクリプト・グリッド）のマス線テクスチャを再現 */
+.palette-manuscript .manuscript-editor-lines {
+  background-image: 
+    linear-gradient(rgba(16, 185, 129, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 185, 129, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-attachment: local;
+  line-height: 24px !important;
+  font-family: "Shippori Mincho", "Hiragino Mincho ProN", serif !important;
+}
+
+/* 羊皮紙独自の羊皮紙素材風グラデーション・質感を生成 */
+.palette-parchment {
+  background-image: radial-gradient(circle, rgba(253, 250, 246, 0.1) 60%, rgba(230, 215, 195, 0.25) 100%) !important;
+}
+
+.palette-parchment .parchment-vintage-bg {
+  background: #fbf5e9 !important;
+  border-color: #d8c3a5 !important;
+  box-shadow: inset 0 0 12px rgba(139, 90, 43, 0.12) !important;
+}
+
+/* 枠線のアクセントカラー適応 */
+.accent-border-hover {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.accent-border-hover:hover {
+  border-color: var(--accent-color) !important;
+  box-shadow: 0 0 10px var(--accent-light) !important;
+}
+
+.welcome-gradient-border {
+  border: 2px solid var(--accent-color) !important;
+  box-shadow: 0 4px 24px var(--accent-light) !important;
+}
+
+.app-logo-color {
+  color: var(--accent-color) !important;
+  stroke: var(--accent-color) !important;
+}
+
+/* カードやパレットなどの枠線アクセント適応 (全テーマ) */
+.palette-light .theme-accent-border,
+.palette-sakura .theme-accent-border,
+.palette-parchment .theme-accent-border,
+.palette-manuscript .theme-accent-border,
+.palette-custom .theme-accent-border {
+  border-color: var(--accent-color) !important;
+}
+
+.palette-dark .theme-accent-border,
+.palette-night .theme-accent-border {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}

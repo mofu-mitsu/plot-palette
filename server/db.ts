@@ -73,6 +73,7 @@ async function initializeTables(sqlClient: any) {
             name TEXT,
             email TEXT,
             login_method TEXT,
+            is_premium BOOLEAN DEFAULT false,
             last_signed_in TIMESTAMP,
             created_at TIMESTAMP DEFAULT NOW()
           );
@@ -170,6 +171,14 @@ async function initializeTables(sqlClient: any) {
             created_at TIMESTAMP DEFAULT NOW()
           );
         `);
+
+        // Synchronize and heal the column schema as a safe post-initialization step
+        try {
+          await sqlClient`ALTER TABLE palette_users ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT false;`;
+          console.log("[DB Debug] ✔ Verified check/add option `is_premium` on `palette_users`.");
+        } catch (err: any) {
+          console.warn("[DB Debug] Optional is_premium col healing warning:", err.message || err);
+        }
 
         initialized = true;
         console.log("[DB Debug] 🎉 All database tables checked and verified successfully with Supabase Postgres!");
@@ -304,5 +313,16 @@ export async function upsertUser(userData: {
     console.log(`[DB Debug] Successfully upserted user '${userData.openId}' in Supabase`);
   } catch (err) {
     console.error(`[DB Debug] upsertUser for '${userData.openId}' failed:`, err);
+  }
+}
+
+export async function updateUserPremiumStatus(openId: string, isPremium: boolean) {
+  const dbConnection = getDb();
+  if (!dbConnection) return;
+  try {
+    await dbConnection.update(users).set({ isPremium }).where(eq(users.openId, openId));
+    console.log(`[DB Debug] Updated isPremium for user '${openId}' to ${isPremium}`);
+  } catch (err) {
+    console.error(`[DB Debug] updateUserPremiumStatus failed:`, err);
   }
 }

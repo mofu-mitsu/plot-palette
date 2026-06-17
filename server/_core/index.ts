@@ -4,7 +4,7 @@ import { setupVite, serveStatic } from "./vite";
 import { registerOAuthRoutes } from "./oauth";
 import { sdk } from "./sdk";
 import { COOKIE_NAME } from "../../shared/const";
-import { getDb, initLogs, ensureTablesInitialized, getUserByOpenId, upsertUser } from "../db";
+import { getDb, initLogs, ensureTablesInitialized, getUserByOpenId, upsertUser, updateUserPremiumStatus } from "../db";
 import { users, novels, plots, characters, episodes, settings, mementos } from "../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -90,6 +90,15 @@ app.use(async (req: any, res, next) => {
               loginMethod: session.openId.startsWith("google:") ? "google" : "sandbox",
               lastSignedIn: new Date(),
             });
+            req.user = {
+              ...session,
+              isPremium: false,
+            };
+          } else {
+            req.user = {
+              ...session,
+              isPremium: !!dbUser.isPremium,
+            };
           }
         } catch (dbErr) {
           console.error("[Auth Middleware] Auto-healing database user record failed:", dbErr);
@@ -1094,6 +1103,23 @@ app.delete("/api/novels/:novelId/memos/:id", requireAuth, async (req: any, res) 
   }
   mockDb.memos = mockDb.memos.filter((m) => m.id !== id);
   res.json({ success: true });
+});
+
+app.post("/api/upgrade-premium", requireAuth, async (req: any, res) => {
+  try {
+    const { code } = req.body;
+    if (code && code.includes("MofuPlot25")) {
+      const openId = req.user.openId;
+      await updateUserPremiumStatus(openId, true);
+      req.user.isPremium = true;
+      return res.json({ success: true, message: "👑 プレミアムが正常に有効化されました！" });
+    } else {
+      return res.status(400).json({ error: "無効な合言葉です。" });
+    }
+  } catch (e: any) {
+    console.error("[API Debug] Failed to upgrade premium:", e);
+    return res.status(500).json({ error: "アップグレード処理に失敗しました。" });
+  }
 });
 
 app.get("/api/me", (req: any, res) => {

@@ -5,6 +5,7 @@ export const users = pgTable("palette_users", {
   name: text("name"),
   email: text("email"),
   loginMethod: text("login_method"), // google or sandbox
+  isPremium: boolean("is_premium").default(false),
   lastSignedIn: timestamp("last_signed_in"),
   createdAt: timestamp("created_at").defaultNow(),
 });

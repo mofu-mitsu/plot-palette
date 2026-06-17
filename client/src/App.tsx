@@ -71,7 +71,14 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   // Core Novel Navigation
-  const [rawNovels, setRawNovels] = useState<Novel[]>([]);
+  const [rawNovels, setRawNovels] = useState<Novel[]>(() => {
+    try {
+      const cached = localStorage.getItem("optimistic_raw_novels_v1");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const novels = rawNovels;
   const setNovels = (val: Novel[] | ((prev: Novel[]) => Novel[])) => {
     setRawNovels((prevRaw) => {
@@ -97,29 +104,181 @@ export default function App() {
         result.push(n);
       }
 
-      return result.sort((a, b) => {
+      const sorted = result.sort((a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return dateB - dateA;
       });
+
+      // Save to cache
+      try {
+        localStorage.setItem("optimistic_raw_novels_v1", JSON.stringify(sorted));
+      } catch (e) {
+        console.warn("Optimistic save error", e);
+      }
+
+      return sorted;
     });
   };
-  const [selectedNovel, setSelectedNovel] = useState<Novel | null>(null);
+  const [selectedNovel, setSelectedNovelRaw] = useState<Novel | null>(() => {
+    try {
+      const cached = localStorage.getItem("optimistic_selected_novel_v1");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const setSelectedNovel = (n: Novel | null) => {
+    setSelectedNovelRaw(n);
+    try {
+      if (n) {
+        localStorage.setItem("optimistic_selected_novel_v1", JSON.stringify(n));
+      } else {
+        localStorage.removeItem("optimistic_selected_novel_v1");
+      }
+    } catch (e) {
+      console.warn("Optimistic selected novel save error", e);
+    }
+  };
 
   // Active workspace tab (Nora features setup)
   // "theme" (テーマ), "plots" (プロット・時系列), "relations" (登場人物・相関図), "write" (執筆・エディタ), "settings" (資料・世界観), "memos" (メモ・セリフ)
-  const [activeTab, setActiveTab] = useState<"theme" | "plots" | "relations" | "write" | "settings" | "memos">("plots");
+  const [activeTab, setActiveTabRaw] = useState<"theme" | "plots" | "relations" | "write" | "settings" | "memos" >(() => {
+    try {
+      return (localStorage.getItem("optimistic_active_tab_v1") as any) || "plots";
+    } catch {
+      return "plots";
+    }
+  });
 
-  // Novel Data collections
-  const [plots, setPlots] = useState<Plot[]>([]);
-  const [characters, setCharacters] = useState<Character[]>([]);
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [worldSettings, setWorldSettings] = useState<SettingWorld[]>([]);
-  const [memos, setMemos] = useState<MemoIdea[]>([]);
+  const setActiveTab = (tab: "theme" | "plots" | "relations" | "write" | "settings" | "memos") => {
+    setActiveTabRaw(tab);
+    try {
+      localStorage.setItem("optimistic_active_tab_v1", tab);
+    } catch (e) {
+      console.warn("Optimistic tab save error", e);
+    }
+  };
+
+  // Novel Data collections with cache loaders
+  const [plots, setPlotsRaw] = useState<Plot[]>(() => {
+    try {
+      const cached = localStorage.getItem("optimistic_plots_v1");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const setPlots = (val: Plot[] | ((prev: Plot[]) => Plot[])) => {
+    setPlotsRaw((prev) => {
+      const resolved = typeof val === "function" ? val(prev) : val;
+      try {
+        localStorage.setItem("optimistic_plots_v1", JSON.stringify(resolved));
+      } catch (e) {}
+      return resolved;
+    });
+  };
+
+  const [characters, setCharactersRaw] = useState<Character[]>(() => {
+    try {
+      const cached = localStorage.getItem("optimistic_characters_v1");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const setCharacters = (val: Character[] | ((prev: Character[]) => Character[])) => {
+    setCharactersRaw((prev) => {
+      const resolved = typeof val === "function" ? val(prev) : val;
+      try {
+        localStorage.setItem("optimistic_characters_v1", JSON.stringify(resolved));
+      } catch (e) {}
+      return resolved;
+    });
+  };
+
+  const [episodes, setEpisodesRaw] = useState<Episode[]>(() => {
+    try {
+      const cached = localStorage.getItem("optimistic_episodes_v1");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const setEpisodes = (val: Episode[] | ((prev: Episode[]) => Episode[])) => {
+    setEpisodesRaw((prev) => {
+      const resolved = typeof val === "function" ? val(prev) : val;
+      try {
+        localStorage.setItem("optimistic_episodes_v1", JSON.stringify(resolved));
+      } catch (e) {}
+      return resolved;
+    });
+  };
+
+  const [worldSettings, setWorldSettingsRaw] = useState<SettingWorld[]>(() => {
+    try {
+      const cached = localStorage.getItem("optimistic_world_settings_v1");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const setWorldSettings = (val: SettingWorld[] | ((prev: SettingWorld[]) => SettingWorld[])) => {
+    setWorldSettingsRaw((prev) => {
+      const resolved = typeof val === "function" ? val(prev) : val;
+      try {
+        localStorage.setItem("optimistic_world_settings_v1", JSON.stringify(resolved));
+      } catch (e) {}
+      return resolved;
+    });
+  };
+
+  const [memos, setMemosRaw] = useState<MemoIdea[]>(() => {
+    try {
+      const cached = localStorage.getItem("optimistic_memos_v1");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const setMemos = (val: MemoIdea[] | ((prev: MemoIdea[]) => MemoIdea[])) => {
+    setMemosRaw((prev) => {
+      const resolved = typeof val === "function" ? val(prev) : val;
+      try {
+        localStorage.setItem("optimistic_memos_v1", JSON.stringify(resolved));
+      } catch (e) {}
+      return resolved;
+    });
+  };
 
   // Editing Sub-states
-  const [activeEpisode, setActiveEpisode] = useState<Episode | null>(null);
-  const [isVerticalWriting, setIsVerticalWriting] = useState(false);
+  const [activeEpisode, setActiveEpisodeRaw] = useState<Episode | null>(() => {
+    try {
+      const cached = localStorage.getItem("optimistic_active_episode_v1");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const setActiveEpisode = (ep: Episode | null) => {
+    setActiveEpisodeRaw(ep);
+    try {
+      if (ep) {
+        localStorage.setItem("optimistic_active_episode_v1", JSON.stringify(ep));
+      } else {
+        localStorage.removeItem("optimistic_active_episode_v1");
+      }
+    } catch (e) {}
+  };
+
+  const [isVerticalWriting, setIsVerticalWriting] = useState(() => {
+    try {
+      return localStorage.getItem("optimistic_is_vertical_v1") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [syncStatus, setSyncStatus] = useState<"synced" | "saving" | "offline">("synced");
 
   // --- Modals Form States ---
@@ -179,6 +338,33 @@ export default function App() {
   const [newCharCustomFields, setNewCharCustomFields] = useState<{ key: string; value: string }[]>([]);
   const [customFieldKey, setCustomFieldKey] = useState("");
   const [customFieldValue, setCustomFieldValue] = useState("");
+
+  // --- Custom Confirm Modal States & Double Submit Prevention Guards ---
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
+  const showCustomConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmConfig({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: () => {
+        onConfirm();
+        setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  const [isSavingLocal, setIsSavingLocal] = useState(false);
 
   // --- Beautiful Writing Palette Themes and Premium states ---
   const [isPremium, setIsPremium] = useState<boolean>(() => {
@@ -332,6 +518,10 @@ export default function App() {
       })
       .then((data) => {
         setUser(data.user);
+        if (data.user && typeof data.user.isPremium !== "undefined") {
+          setIsPremium(!!data.user.isPremium);
+          localStorage.setItem("plot_palette_premium_v1", data.user.isPremium ? "true" : "false");
+        }
         setLoading(false);
       })
       .catch(() => {
@@ -682,12 +872,38 @@ export default function App() {
   // Fetch sub collections when selected novel changes with defensive robust array assurance
   useEffect(() => {
     if (selectedNovel) {
+      // 🚀 OPTIMISTIC LOAD CACHE: Load from local backup immediately before fetching to eliminate wait-time completely!
+      const userKey = `plot_palette_backup_v2_${user?.openId || "guest"}`;
+      const backupStr = localStorage.getItem(userKey);
+      if (backupStr) {
+        try {
+          const parsed = JSON.parse(backupStr);
+          const id = selectedNovel.id;
+          const localP = (parsed.plots || []).filter((p: any) => p.novelId === id);
+          const localC = (parsed.characters || []).filter((c: any) => c.novelId === id);
+          const localE = (parsed.episodes || []).filter((e: any) => e.novelId === id);
+          const localS = (parsed.worldSettings || []).filter((s: any) => s.novelId === id);
+          const localM = (parsed.memos || []).filter((m: any) => m.novelId === id);
+          
+          if (localP.length > 0) setPlots(localP);
+          if (localC.length > 0) setCharacters(localC);
+          if (localE.length > 0) {
+            setEpisodes(localE);
+            if (!activeEpisode) {
+              setActiveEpisode(localE[0]);
+            }
+          }
+          if (localS.length > 0) setWorldSettings(localS);
+          if (localM.length > 0) setMemos(localM);
+        } catch (e) {
+          console.warn("Optimistic sub-load failed:", e);
+        }
+      }
+
       const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedNovel.id);
       
       if (!isValidUuid) {
         console.log(`[Sync Engine] selectedNovel is an offline ID '${selectedNovel.id}', fallback to local backup.`);
-        const userKey = `plot_palette_backup_v2_${user?.openId || "guest"}`;
-        const backupStr = localStorage.getItem(userKey);
         if (backupStr) {
           try {
             const parsed = JSON.parse(backupStr);
@@ -1264,21 +1480,27 @@ export default function App() {
 
   const handleDeletePlot = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!selectedNovel || !confirm("このプロットを削除してもいい？")) return;
+    if (!selectedNovel) return;
 
-    setSyncStatus("saving");
-    try {
-      const res = await fetch(`/api/novels/${selectedNovel.id}/plots/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setPlots(plots.filter((p) => p.id !== id));
-        setSyncStatus("synced");
-      } else {
-        throw new Error();
+    showCustomConfirm(
+      "プロットの削除",
+      `このプロット断片（${plots.find(p => p.id === id)?.title || "無題"}）を本当に削除してもいい？`,
+      async () => {
+        setSyncStatus("saving");
+        try {
+          const res = await fetch(`/api/novels/${selectedNovel.id}/plots/${id}`, { method: "DELETE" });
+          if (res.ok) {
+            setPlots(plots.filter((p) => p.id !== id));
+            setSyncStatus("synced");
+          } else {
+            throw new Error();
+          }
+        } catch (e) {
+          setPlots(plots.filter((p) => p.id !== id));
+          setSyncStatus("offline");
+        }
       }
-    } catch (e) {
-      setPlots(plots.filter((p) => p.id !== id));
-      setSyncStatus("offline");
-    }
+    );
   };
 
   // --- Characters Handlers ---
@@ -1310,7 +1532,9 @@ export default function App() {
   const handleCreateOrUpdateCharacter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedNovel || !newCharName.trim()) return;
+    if (isSavingLocal) return;
 
+    setIsSavingLocal(true);
     setSyncStatus("saving");
     const payload = {
       name: newCharName,
@@ -1369,26 +1593,34 @@ export default function App() {
       }
       setSyncStatus("offline");
       setShowCharModal(false);
+    } finally {
+      setIsSavingLocal(false);
     }
   };
 
   const handleDeleteCharacter = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!selectedNovel || !confirm("この登場人物をパレットから削除する？")) return;
+    if (!selectedNovel) return;
 
-    setSyncStatus("saving");
-    try {
-      const res = await fetch(`/api/novels/${selectedNovel.id}/characters/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setCharacters(characters.filter((c) => c.id !== id));
-        setSyncStatus("synced");
-      } else {
-        throw new Error();
+    showCustomConfirm(
+      "登場人物の削除", 
+      `この登場人物（${characters.find(c => c.id === id)?.name || "キャラクター"}）をパレットから本当に削除しますか？\n登録されたプロフィール情報や、人物関係図の関係線も消えちゃいます。`, 
+      async () => {
+        setSyncStatus("saving");
+        try {
+          const res = await fetch(`/api/novels/${selectedNovel.id}/characters/${id}`, { method: "DELETE" });
+          if (res.ok) {
+            setCharacters(characters.filter((c) => c.id !== id));
+            setSyncStatus("synced");
+          } else {
+            throw new Error();
+          }
+        } catch (e) {
+          setCharacters(characters.filter((c) => c.id !== id));
+          setSyncStatus("offline");
+        }
       }
-    } catch (e) {
-      setCharacters(characters.filter((c) => c.id !== id));
-      setSyncStatus("offline");
-    }
+    );
   };
 
   // --- World Settings (資料) Handlers ---
@@ -1414,7 +1646,9 @@ export default function App() {
   const handleCreateOrUpdateSetting = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedNovel || !newWorldTitle.trim()) return;
+    if (isSavingLocal) return;
 
+    setIsSavingLocal(true);
     setSyncStatus("saving");
     const payload = {
       title: newWorldTitle,
@@ -1470,26 +1704,34 @@ export default function App() {
       }
       setSyncStatus("offline");
       setShowWorldModal(false);
+    } finally {
+      setIsSavingLocal(false);
     }
   };
 
   const handleDeleteSetting = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!selectedNovel || !confirm("この世界観資料・伏線設定を削除する？")) return;
+    if (!selectedNovel) return;
 
-    setSyncStatus("saving");
-    try {
-      const res = await fetch(`/api/novels/${selectedNovel.id}/settings/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setWorldSettings(worldSettings.filter((s) => s.id !== id));
-        setSyncStatus("synced");
-      } else {
-        throw new Error();
+    showCustomConfirm(
+      "世界観設定・伏線の削除",
+      `この設定資料「${worldSettings.find(s => s.id === id)?.title || "無題"}」を本当に削除しますか？`,
+      async () => {
+        setSyncStatus("saving");
+        try {
+          const res = await fetch(`/api/novels/${selectedNovel.id}/settings/${id}`, { method: "DELETE" });
+          if (res.ok) {
+            setWorldSettings(worldSettings.filter((s) => s.id !== id));
+            setSyncStatus("synced");
+          } else {
+            throw new Error();
+          }
+        } catch (e) {
+          setWorldSettings(worldSettings.filter((s) => s.id !== id));
+          setSyncStatus("offline");
+        }
       }
-    } catch (e) {
-      setWorldSettings(worldSettings.filter((s) => s.id !== id));
-      setSyncStatus("offline");
-    }
+    );
   };
 
   // --- Memos/Idea Handlers ---
@@ -1511,7 +1753,9 @@ export default function App() {
   const handleCreateOrUpdateMemo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedNovel || (!newMemoTitle.trim() && !newMemoContent.trim())) return;
+    if (isSavingLocal) return;
 
+    setIsSavingLocal(true);
     setSyncStatus("saving");
     const payload = {
       title: newMemoTitle || "無題のひらめき",
@@ -1566,26 +1810,34 @@ export default function App() {
       }
       setSyncStatus("offline");
       setShowMemoModal(false);
+    } finally {
+      setIsSavingLocal(false);
     }
   };
 
   const handleDeleteMemo = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!selectedNovel || !confirm("このメモを捨てちゃう？")) return;
+    if (!selectedNovel) return;
 
-    setSyncStatus("saving");
-    try {
-      const res = await fetch(`/api/novels/${selectedNovel.id}/memos/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setMemos(memos.filter((m) => m.id !== id));
-        setSyncStatus("synced");
-      } else {
-        throw new Error();
+    showCustomConfirm(
+      "付箋メモの削除",
+      `このひらめき付箋「${memos.find(m => m.id === id)?.title || "無題"}」を破棄してもいいですか？`,
+      async () => {
+        setSyncStatus("saving");
+        try {
+          const res = await fetch(`/api/novels/${selectedNovel.id}/memos/${id}`, { method: "DELETE" });
+          if (res.ok) {
+            setMemos(memos.filter((m) => m.id !== id));
+            setSyncStatus("synced");
+          } else {
+            throw new Error();
+          }
+        } catch (e) {
+          setMemos(memos.filter((m) => m.id !== id));
+          setSyncStatus("offline");
+        }
       }
-    } catch (e) {
-      setMemos(memos.filter((m) => m.id !== id));
-      setSyncStatus("offline");
-    }
+    );
   };
 
   // --- Episodes/Writing Studio Handlers ---
@@ -1683,29 +1935,35 @@ export default function App() {
 
   const handleDeleteEpisode = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!selectedNovel || !confirm("このエピソードを完全に削除する？書いた本文も消えちゃいます。")) return;
+    if (!selectedNovel) return;
 
-    setSyncStatus("saving");
-    try {
-      const res = await fetch(`/api/novels/${selectedNovel.id}/episodes/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        const remaining = episodes.filter((e) => e.id !== id);
-        setEpisodes(remaining);
-        if (activeEpisode?.id === id) {
-          setActiveEpisode(remaining.length > 0 ? remaining[0] : null);
+    showCustomConfirm(
+      "エピソードの削除",
+      `このエピソード（${episodes.find(ep => ep.id === id)?.title || "無題のエピソード"}）を完全に削除しますか？\n心を込めて書いた本文もすべて消えてしまいます。`,
+      async () => {
+        setSyncStatus("saving");
+        try {
+          const res = await fetch(`/api/novels/${selectedNovel.id}/episodes/${id}`, { method: "DELETE" });
+          if (res.ok) {
+            const remaining = episodes.filter((eq) => eq.id !== id);
+            setEpisodes(remaining);
+            if (activeEpisode?.id === id) {
+              setActiveEpisode(remaining.length > 0 ? remaining[0] : null);
+            }
+            setSyncStatus("synced");
+          } else {
+            throw new Error();
+          }
+        } catch (e) {
+          const remaining = episodes.filter((eq) => eq.id !== id);
+          setEpisodes(remaining);
+          if (activeEpisode?.id === id) {
+            setActiveEpisode(remaining.length > 0 ? remaining[0] : null);
+          }
+          setSyncStatus("offline");
         }
-        setSyncStatus("synced");
-      } else {
-        throw new Error();
       }
-    } catch (e) {
-      const remaining = episodes.filter((e) => e.id !== id);
-      setEpisodes(remaining);
-      if (activeEpisode?.id === id) {
-        setActiveEpisode(remaining.length > 0 ? remaining[0] : null);
-      }
-      setSyncStatus("offline");
-    }
+    );
   };
 
   // --- Nora Word Tracker Calculator & Stats ---
@@ -1853,17 +2111,28 @@ export default function App() {
           className="flex items-center gap-2 md:gap-3 cursor-pointer"
           onClick={() => setSelectedNovel(null)}
         >
-          <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-tr from-pink-500 via-rose-400 to-amber-300 flex items-center justify-center text-white shadow-md shadow-pink-200/50 shrink-0">
+          <div 
+            className={`w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center text-white shadow-md shrink-0 ${
+              isPremium 
+                ? "border theme-accent-border border-white/20" 
+                : "bg-gradient-to-tr from-pink-500 via-rose-400 to-amber-300 shadow-pink-200/50"
+            }`}
+            style={isPremium ? { backgroundColor: "var(--accent-color)" } : undefined}
+          >
             <Palette className="w-4 h-4 md:w-5 md:h-5 animate-pulse" />
           </div>
           <div className="flex flex-col justify-center">
             <h1 
-              className="text-[14px] md:text-lg font-sans font-extrabold tracking-wider bg-gradient-to-r from-pink-600 to-rose-500 bg-clip-text text-transparent flex items-center gap-1.5"
-              style={{ color: "transparent" }}
+              className={`text-[14px] md:text-lg font-sans font-extrabold tracking-wider flex items-center gap-1.5 ${
+                isPremium 
+                  ? "" 
+                  : "bg-gradient-to-r from-pink-600 to-rose-500 bg-clip-text text-transparent"
+              }`}
+              style={isPremium ? { color: "var(--accent-color)" } : { color: "transparent" }}
             >
-              Plot Palette <span className="text-[9px] md:text-[10px] bg-pink-500 text-white px-1.5 md:px-2 py-0 md:py-0.5 rounded-full font-bold shadow-sm">Studio</span>
+              Plot Palette <span className="text-[9px] md:text-[10px] text-white px-1.5 md:px-2 py-0 md:py-0.5 rounded-full font-bold shadow-sm" style={{ backgroundColor: "var(--accent-color)" }}>Studio</span>
             </h1>
-            <p className="text-[7px] md:text-[9px] text-pink-400 font-semibold tracking-wider uppercase leading-tight md:leading-normal">Creative Story Generator</p>
+            <p className="text-[7px] md:text-[9px] font-semibold tracking-wider uppercase leading-tight md:leading-normal" style={{ color: "var(--accent-color)" }}>Creative Story Generator</p>
           </div>
         </div>
 
@@ -2259,42 +2528,57 @@ export default function App() {
              小説選択・一覧アトリエ UI
              ======================================================== */
           <div>
-            {/* 可愛いウェルカムボード (一般ユーザー向け、明るく可愛いグラデーション配色) */}
-            <div className="bg-gradient-to-br from-pink-500/90 via-rose-400/95 to-amber-300 rounded-3xl p-6 md:p-8 text-white shadow-xl mb-8 relative overflow-hidden ring-1 ring-pink-300/20">
-              <div className="absolute right-0 bottom-0 opacity-10 translate-x-12 translate-y-12 scale-150 text-white">
+            {/* 可愛いウェルカムボード (プレミアム時には好みのカラーに変身、一般では明るく可愛い桜グラデーション) */}
+            <div className={`rounded-3xl p-6 md:p-8 shadow-xl mb-8 relative overflow-hidden transition-all ${
+              isPremium 
+                ? "welcome-gradient-border bg-white text-slate-800" 
+                : "bg-gradient-to-br from-pink-500/90 via-rose-400/95 to-amber-300 ring-1 ring-pink-300/20 text-white"
+            }`}>
+              <div className="absolute right-0 bottom-0 opacity-10 translate-x-12 translate-y-12 scale-150" style={{ color: isPremium ? "var(--accent-color)" : "white" }}>
                 <Compass className="w-96 h-96 animate-pulse" />
               </div>
               <div className="relative z-10 max-w-2xl">
-                <span className="bg-white/20 text-white backdrop-blur border border-white/20 px-3 py-1 rounded-full text-xs font-bold tracking-wider flex items-center gap-1.5 w-fit">
+                <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wider flex items-center gap-1.5 w-fit ${
+                  isPremium 
+                    ? "bg-pink-50 text-pink-600 border border-pink-100" 
+                    : "bg-white/20 text-white backdrop-blur border border-white/20"
+                }`} style={isPremium ? { backgroundColor: "var(--accent-light)", color: "var(--accent-color)", borderColor: "var(--border-color)" } : undefined}>
                   <Sparkles className="w-3.5 h-3.5" /> Story Concept Board 🎨
                 </span>
-                <h2 className="text-2xl md:text-3xl font-sans font-black text-white mt-4 mb-2 tracking-wide leading-tight">
+                <h2 className={`text-2xl md:text-3xl font-sans font-black mt-4 mb-2 tracking-wide leading-tight ${
+                  isPremium ? "text-slate-850" : "text-white"
+                }`} style={isPremium ? { color: "var(--text-main)" } : undefined}>
                   おかえりなさい！今日はどんなストーリーを紡ぎますか？
                 </h2>
-                <p className="text-white/80 text-sm leading-relaxed mb-6 font-medium">
+                <p className={`text-sm leading-relaxed mb-6 font-medium ${
+                  isPremium ? "text-slate-500" : "text-white/80"
+                }`}>
                   Plot Paletteは、起承転結のプロット設計、魅力的な登場人物パレット、人物相関図、世界観の設定資料をパレットのように鮮やかに整理し、極上のシームレスさを備えた執筆環境で物語の完成を徹底的にサポートする全天候型創作アトリエです。
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => handleOpenNovelModal()}
-                    className="bg-white hover:bg-pink-50 text-pink-600 font-extrabold px-6 py-3 rounded-xl hover:shadow-lg transition hover:scale-[1.03] active:scale-[0.97] flex items-center gap-2 text-sm shadow-md"
+                    className="font-extrabold px-6 py-3 rounded-xl hover:shadow-lg transition hover:scale-[1.03] active:scale-[0.97] flex items-center gap-2 text-sm shadow-md"
+                    style={isPremium ? { backgroundColor: "var(--accent-color)", color: "white" } : { backgroundColor: "white", color: "#db2777" }}
                   >
-                    <Plus className="w-4 h-4 text-pink-600" /> 新しい物語を創作する
+                    <Plus className="w-4 h-4" /> 新しい物語を創作する
                   </button>
                   <a 
                     href="https://mofu-mitsu.github.io/" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="bg-white/20 hover:bg-white/30 text-white font-extrabold px-6 py-3 rounded-xl hover:shadow-lg transition hover:scale-[1.03] active:scale-[0.97] flex items-center gap-2 text-sm backdrop-blur"
+                    className="font-extrabold px-6 py-3 rounded-xl hover:shadow-lg transition hover:scale-[1.03] active:scale-[0.97] flex items-center gap-2 text-sm border"
+                    style={isPremium ? { backgroundColor: "var(--bg-card)", color: "var(--text-main)", borderColor: "var(--border-color)" } : { backgroundColor: "rgba(255,255,255,0.2)", color: "white", borderColor: "rgba(255,255,255,0.2)" }}
                   >
-                    <Home className="w-4 h-4 text-white" />
+                    <Home className="w-4 h-4" />
                     ホームへ戻る
                   </a>
                   <a 
                     href="https://mofu-mitsu.github.io/orikyara-relationship-chart/" 
                     target="_blank" 
                     rel="noreferrer"
-                    className="bg-white/10 hover:bg-white/20 text-white font-extrabold px-5 py-3 rounded-xl border border-white/20 transition text-xs flex items-center gap-2"
+                    className="font-extrabold px-5 py-3 rounded-xl border transition text-xs flex items-center gap-2"
+                    style={isPremium ? { backgroundColor: "var(--bg-card)", color: "var(--text-muted)", borderColor: "var(--border-color)" } : { backgroundColor: "rgba(255,255,255,0.1)", color: "white", borderColor: "rgba(255,255,255,0.2)" }}
                   >
                     <ExternalLink className="w-3.5 h-3.5" /> 立ち上げ：相関図メーカー
                   </a>
@@ -3457,7 +3741,7 @@ export default function App() {
                              縦書き表示モード
                              日本の小説・縦書きの読書体験をCSSにて精細に表現。
                           */
-                          <div className="border border-pink-100 rounded-2xl bg-[#fff0f3]/10 p-4 md:p-6 overflow-x-auto overflow-y-hidden h-[420px] flex justify-end">
+                          <div className={`border border-pink-100 rounded-2xl bg-[#fff0f3]/10 p-4 md:p-6 overflow-x-auto overflow-y-hidden h-[420px] flex justify-end ${themeState === "parchment" ? "parchment-vintage-bg" : ""}`}>
                             <textarea
                               value={activeEpisode.body || ""}
                               onChange={(e) => handleUpdateEpisodeBody(e.target.value)}
@@ -3465,9 +3749,9 @@ export default function App() {
                               style={{ 
                                 writingMode: "vertical-rl", 
                                 textOrientation: "mixed",
-                                lineHeight: "2.4",
-                                letterSpacing: "0.15em",
-                                fontSize: "14px",
+                                lineHeight: themeState === "manuscript" ? "24px" : "2.4",
+                                letterSpacing: themeState === "manuscript" ? "10px" : "0.15em",
+                                fontSize: themeState === "manuscript" ? "14px" : "14px",
                                 outline: "none",
                                 border: "none",
                                 background: "transparent",
@@ -3475,17 +3759,17 @@ export default function App() {
                                 height: "100%",
                                 resize: "none"
                               }}
-                              className="font-sans text-slate-800 pr-4"
+                              className={`font-sans text-slate-800 pr-4 ${themeState === "manuscript" ? "manuscript-editor-lines" : ""} ${themeState === "parchment" ? "parchment-vintage-bg" : ""}`}
                             />
                           </div>
                         ) : (
                           /* 定期的な横書き表示モード */
-                          <div className="border border-pink-100 rounded-2xl bg-[#fff0f3]/5 p-2 h-[420px]">
+                          <div className={`border border-pink-100 rounded-2xl bg-[#fff0f3]/5 p-2 h-[420px] ${themeState === "parchment" ? "parchment-vintage-bg" : ""}`}>
                             <textarea
                               value={activeEpisode.body || ""}
                               onChange={(e) => handleUpdateEpisodeBody(e.target.value)}
                               placeholder="ここに物語を自由に書き綴っていこう...🌸"
-                              className="w-full h-full p-4 font-sans text-sm bg-transparent outline-none border-none resize-none overflow-y-auto leading-relaxed text-slate-800"
+                              className={`w-full h-full p-4 font-sans text-sm bg-transparent outline-none border-none resize-none overflow-y-auto text-slate-800 leading-relaxed ${themeState === "manuscript" ? "manuscript-editor-lines" : ""} ${themeState === "parchment" ? "parchment-vintage-bg" : ""}`}
                             />
                           </div>
                         )}
@@ -3613,19 +3897,22 @@ export default function App() {
                                       <div className="flex items-center gap-1 ml-2 flex-shrink-0">
                                         <button 
                                           onClick={() => {
-                                            if (confirm("本当にこのバージョンに巻き戻してもいいですか？現在の文章は上書きされます。")) {
-                                              handleUpdateEpisodeBody(s.body);
-                                              // 通知
-                                              const newNotif = {
-                                                id: `notif-${Date.now()}`,
-                                                title: "バージョン復元完了",
-                                                content: `『${s.note}』のバージョンに巻き戻しました！`,
-                                                date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                                                type: "info" as const,
-                                                read: false
-                                              };
-                                              setNotifications([newNotif, ...notifications]);
-                                            }
+                                            showCustomConfirm(
+                                              "バージョンの復元",
+                                              `本当に「${s.note || "無題のバックアップ"}」のバージョンに巻き戻してもいいですか？現在の執筆エリアの文章は上書きされます。`,
+                                              () => {
+                                                handleUpdateEpisodeBody(s.body);
+                                                const newNotif = {
+                                                  id: `notif-${Date.now()}`,
+                                                  title: "バージョン復元完了",
+                                                  content: `『${s.note || "無題のバックアップ"}』のバージョンに巻き戻しました！`,
+                                                  date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                                                  type: "info" as const,
+                                                  read: false
+                                                };
+                                                setNotifications([newNotif, ...notifications]);
+                                              }
+                                            );
                                           }}
                                           className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold px-2 py-1 rounded text-[9px] transition"
                                           title="この時点に復元"
@@ -4889,18 +5176,31 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       if (codeInput.includes("MofuPlot25")) {
-                      setIsPremium(true);
-                      localStorage.setItem("plot_palette_premium_v1", "true");
-                      toast.success("👑 プレミアム快適化が正常にアクティベートされました！すべての機能をご堪能ください。");
-                      setShowPremiumModal(false);
-                    } else {
-                      toast.error("❌ 合言葉が確認できませんでした。正しいキーワードが含まれているか、もう一度お確かめください。");
-                    }
-                  }}
-                  className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold py-2.5 px-6 rounded-full text-xs tracking-wider transition shadow-md shadow-amber-200/50"
-                >
-                  アップグレード認定 👑
-                </button>
+                        fetch("/api/upgrade-premium", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ code: codeInput }),
+                        })
+                          .then((r) => {
+                            setIsPremium(true);
+                            localStorage.setItem("plot_palette_premium_v1", "true");
+                            toast.success("👑 プレミアム快適化がアカウントに紐づけされ、正常にアクティベートされました！おめでとうございます！");
+                            setShowPremiumModal(false);
+                          })
+                          .catch(() => {
+                            setIsPremium(true);
+                            localStorage.setItem("plot_palette_premium_v1", "true");
+                            toast.success("👑 ローカルプレミアム解放！すべてのプレミアム機能がアクティベートされました。");
+                            setShowPremiumModal(false);
+                          });
+                      } else {
+                        toast.error("❌ 合言葉が確認できませんでした。正しいキーワードが含まれているか、もう一度お確かめください。");
+                      }
+                    }}
+                    className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold py-2.5 px-6 rounded-full text-xs tracking-wider transition shadow-md shadow-amber-200/50"
+                  >
+                    アップグレード認定 👑
+                  </button>
                 </div>
               </div>
             </div>
@@ -5246,6 +5546,51 @@ export default function App() {
           </a>
         </div>
       </footer>
+
+      {/* 🌟 Custom Confirm Modal 🌟 */}
+      {confirmConfig.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden text-left flex flex-col">
+            <div className="p-4 border-b border-rose-100 flex items-center justify-between bg-rose-50/10">
+              <span className="text-xs font-black text-rose-700 flex items-center gap-1.5 uppercase tracking-wide font-sans">
+                ⚠️ {confirmConfig.title} ⚠️
+              </span>
+              <button 
+                onClick={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-3 bg-white">
+              <p className="text-xs text-slate-700 leading-relaxed font-bold whitespace-pre-wrap">
+                {confirmConfig.message}
+              </p>
+              <p className="text-[10px] text-slate-400 font-bold leading-none mt-2">
+                ※この操作は取り消すことができません。
+              </p>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 flex gap-2 justify-end bg-slate-50/50">
+              <button
+                type="button"
+                onClick={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-1.5 px-4 rounded-full text-xs transition"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmConfig.onConfirm()}
+                className="bg-rose-500 hover:bg-rose-600 text-white font-bold py-1.5 px-5 rounded-full text-xs transition shadow-sm"
+              >
+                実行する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
