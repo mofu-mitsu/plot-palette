@@ -105,7 +105,7 @@ app.use(async (req: any, res, next) => {
             const isSandbox = session.openId.includes("sandbox");
             req.user = {
               ...session,
-              isPremium: isSandbox ? false : !!dbUser.isPremium,
+              isPremium: !!dbUser.isPremium,
               theme: dbUser.theme || "light",
               customBg: dbUser.customBg || "",
               customCard: dbUser.customCard || "",

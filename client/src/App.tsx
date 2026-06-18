@@ -1064,7 +1064,20 @@ export default function App() {
           }) as CSSStyleDeclaration;
         };
 
-        const canvas = await html2canvas(element, { scale: 2 });
+        // 一時的に最上部へスクロールし、はみ出しによる見切れ（ウォーターマークが消える現象）を防ぐ
+        const originalScrollY = window.scrollY;
+        window.scrollTo(0, 0);
+
+        const canvas = await html2canvas(element, { 
+          scale: 2,
+          useCORS: true,
+          windowHeight: element.scrollHeight,
+          height: element.scrollHeight,
+          y: 0 
+        });
+        
+        // Restore scroll position
+        window.scrollTo(0, originalScrollY);
         
         // Restore immediately after capture
         window.getComputedStyle = originalGetComputedStyle;
@@ -1333,6 +1346,8 @@ export default function App() {
       writeDays: Number(newNovelWriteDays) || 30,
     };
 
+    setShowNovelModal(false);
+
     try {
       if (editingNovel) {
         // Update
@@ -1494,6 +1509,16 @@ export default function App() {
       timelineDate: newPlotTimeline,
     };
 
+    // Optimistic Update
+    const offlineId = editingPlot ? editingPlot.id : `plot-${Date.now()}`;
+    const offlinePlot: Plot = { id: offlineId, novelId: selectedNovel.id, ...payload };
+    if (editingPlot) {
+      setPlots(plots.map((p) => (p.id === editingPlot.id ? offlinePlot : p)));
+    } else {
+      setPlots([...plots, offlinePlot]);
+    }
+    setShowPlotModal(false);
+
     try {
       if (editingPlot) {
         // Update
@@ -1612,6 +1637,16 @@ export default function App() {
       imageUrl: newCharImageUrl,
     };
 
+    // Optimistic Update
+    const offlineId = editingChar ? editingChar.id : `char-${Date.now()}`;
+    const offlineChar: Character = { id: offlineId, novelId: selectedNovel.id, ...payload };
+    if (editingChar) {
+      setCharacters(characters.map((c) => (c.id === editingChar.id ? offlineChar : c)));
+    } else {
+      setCharacters([...characters, offlineChar]);
+    }
+    setShowCharModal(false);
+
     try {
       if (editingChar) {
         // Update
@@ -1723,6 +1758,16 @@ export default function App() {
       fusenStatus: newWorldFusenStatus,
     };
 
+    // Optimistic Update
+    const offlineId = editingWorld ? editingWorld.id : `set-${Date.now()}`;
+    const offlineSet: SettingWorld = { id: offlineId, novelId: selectedNovel.id, ...payload };
+    if (editingWorld) {
+      setWorldSettings(worldSettings.map((s) => (s.id === editingWorld.id ? offlineSet : s)));
+    } else {
+      setWorldSettings([...worldSettings, offlineSet]);
+    }
+    setShowWorldModal(false);
+
     try {
       if (editingWorld) {
         // Update
@@ -1828,6 +1873,16 @@ export default function App() {
       color: newMemoColor,
     };
 
+    // Optimistic Update
+    const offlineId = editingMemo ? editingMemo.id : `memo-${Date.now()}`;
+    const offlineMemo: MemoIdea = { id: offlineId, novelId: selectedNovel.id, ...payload, createdAt: new Date() };
+    if (editingMemo) {
+      setMemos(memos.map((m) => (m.id === editingMemo.id ? offlineMemo : m)));
+    } else {
+      setMemos([...memos, offlineMemo]);
+    }
+    setShowMemoModal(false);
+
     try {
       if (editingMemo) {
         // Update
@@ -1918,6 +1973,18 @@ export default function App() {
       tag: newEpisodeTag,
       wordCount: 0,
     };
+
+    // Optimistic Update
+    const offlineId = `epi-${Date.now()}`;
+    const offlineEpisode: Episode = {
+      id: offlineId,
+      novelId: selectedNovel.id,
+      ...payload,
+    };
+    setEpisodes([...episodes, offlineEpisode]);
+    setActiveEpisode(offlineEpisode);
+    setShowEpisodeModal(false);
+    setNewEpisodeTitle("");
 
     try {
       const res = await fetch(`/api/novels/${selectedNovel.id}/episodes`, {
