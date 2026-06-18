@@ -5470,7 +5470,7 @@ export default function App() {
                 <Crown className="w-8 h-8 text-amber-500 shrink-0 animate-bounce" />
                 <div className="text-[11px] text-pink-950">
                   <p className="font-extrabold">👑 プレミアム快適化機能について</p>
-                  <p className="opacity-80">カスタム調色パレットを使うと、1600万色の中からあなたの作品ごとのテーマ背景色を調色してアトリエを美しく彩ることが可能です。BOOTHの合言葉「MofuPlot25」でアクティベートできます！</p>
+                  <p className="opacity-80">カスタム調色パレットを使うと、1600万色の中からあなたの作品ごとのテーマ背景色を調色してアトリエを美しく彩ることが可能です。BOOTH等で配布されている「サポーター限定の合言葉」を入力してアクティベートできます！</p>
                 </div>
               </div>
             </div>
