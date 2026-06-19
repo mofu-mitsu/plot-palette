@@ -5627,8 +5627,8 @@ export default function App() {
                   rows={5}
                   value={
                     selectedNovel 
-                      ? `私の執筆アトリエ「Plot Palette」で、創作小説『${selectedNovel.title}』のプロットを構築中！✨\n\nあらすじ: ${selectedNovel.description ? selectedNovel.description.substring(0, 50) + "..." : "設定中..."}\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
-                      : `創作ストーリー支援アトリエ「Plot Palette」でプロットや関係図、世界観伏線を構築しています！🎨\n起承転結を並べて美しい小説、お話を。縦書き全画面執筆も最高に捗る…！\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
+                      ? `私の執筆アトリエ「Plot Palette」で、創作小説『${selectedNovel.title}』のプロットを構築中！✨\n\nあらすじ: ${selectedNovel.description ? selectedNovel.description.substring(0, 50) + "..." : "設定中..."}\n\n使っている創作ツール 👇\nhttps://plot-palette.vercel.app/\n#PlotPalette #もふみつ工房`
+                      : `創作ストーリー支援アトリエ「Plot Palette」でプロットや関係図、世界観伏線を構築しています！🎨\n起承転結を並べて美しい小説、お話を。縦書き全画面執筆も最高に捗る…！\n\n使っている創作ツール 👇\nhttps://plot-palette.vercel.app/\n#PlotPalette #もふみつ工房`
                   }
                   className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none bg-white text-slate-700 leading-relaxed font-sans"
                 />
@@ -5639,8 +5639,8 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     const shareText = selectedNovel 
-                      ? `私の執筆アトリエ「Plot Palette」で、創作小説『${selectedNovel.title}』のプロットを構築中！✨\n\nあらすじ: ${selectedNovel.description ? selectedNovel.description.substring(0, 50) + "..." : "設定中..."}\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`
-                      : `創作ストーリー支援アトリエ「Plot Palette」でプロットや関係図、世界観伏線を構築しています！🎨\n起承転結を並べて美しい小説、お話を。縦書き全画面執筆も最高に捗る…！\n\n使っている創作ツール 👇\nhttps://plot-palette.onrender.com/\n#PlotPalette #もふみつ工房`;
+                      ? `私の執筆アトリエ「Plot Palette」で、創作小説『${selectedNovel.title}』のプロットを構築中！✨\n\nあらすじ: ${selectedNovel.description ? selectedNovel.description.substring(0, 50) + "..." : "設定中..."}\n\n使っている創作ツール 👇\nhttps://plot-palette.vercel.app/\n#PlotPalette #もふみつ工房`
+                      : `創作ストーリー支援アトリエ「Plot Palette」でプロットや関係図、世界観伏線を構築しています！🎨\n起承転結を並べて美しい小説、お話を。縦書き全画面執筆も最高に捗る…！\n\n使っている創作ツール 👇\nhttps://plot-palette.vercel.app/\n#PlotPalette #もふみつ工房`;
                     
                     if (navigator.share) {
                       navigator.share({
