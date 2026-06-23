@@ -691,44 +691,52 @@ export default function App() {
   useEffect(() => {
     if (user) {
       setSyncStatus("saving");
+
+      // 🚀 OPTIMISTIC INITIAL LOAD 🚀
+      // バックエンドの応答を待たずにローカルバックアップから即座に画面に表示し、「読み込み中...」の重さを解消する
+      const userKey = getBackupKey();
+      let backupStr = localStorage.getItem(userKey);
+
+      // Migrate if needed before fetching
+      if (!backupStr) {
+        const legacyBackup = localStorage.getItem("plot_palette_backup_v2");
+        if (legacyBackup) {
+          console.log("[Master Sync] Found legacy backup during fetching, migrating to user-specific key...");
+          // CRITICAL: Delete legacy first to free quota space and break deadlock
+          localStorage.removeItem("plot_palette_backup_v2");
+          
+          try {
+            const parsed = JSON.parse(legacyBackup);
+            const slimmed = sanitizeDataForBackup(parsed);
+            const slimmedStr = JSON.stringify(slimmed);
+            localStorage.setItem(userKey, slimmedStr);
+            backupStr = slimmedStr;
+          } catch (e2) {
+            console.error("[Master Sync] Failed to slim during sync-migration", e2);
+          }
+        }
+      }
+
+      let localBackup: any = null;
+      if (backupStr) {
+        try {
+          localBackup = JSON.parse(backupStr);
+          if (localBackup && localBackup.novels && localBackup.novels.length > 0) {
+            setNovels(localBackup.novels);
+            // ローカルにデータがあれば、Supabase/ネットワークを待たずに即座にプログレススピナーを解除する（体感速度向上）
+            setIsNovelsLoading(false);
+          }
+        } catch (e) {
+          console.error("Backup syntax err", e);
+        }
+      }
+
       fetch("/api/novels")
         .then((res) => {
           if (!res.ok) throw new Error("Server error " + res.status);
           return res.json();
         })
         .then(async (dbNovels: any[]) => {
-          const userKey = getBackupKey();
-          let backupStr = localStorage.getItem(userKey);
-
-          // Migrate if needed during fetching
-          if (!backupStr) {
-            const legacyBackup = localStorage.getItem("plot_palette_backup_v2");
-            if (legacyBackup) {
-              console.log("[Master Sync] Found legacy backup during fetching, migrating to user-specific key...");
-              // CRITICAL: Delete legacy first to free quota space and break deadlock
-              localStorage.removeItem("plot_palette_backup_v2");
-              
-              try {
-                const parsed = JSON.parse(legacyBackup);
-                const slimmed = sanitizeDataForBackup(parsed);
-                const slimmedStr = JSON.stringify(slimmed);
-                localStorage.setItem(userKey, slimmedStr);
-                backupStr = slimmedStr;
-              } catch (e2) {
-                console.error("[Master Sync] Failed to slim during sync-migration", e2);
-              }
-            }
-          }
-
-          let localBackup: any = null;
-          if (backupStr) {
-            try {
-              localBackup = JSON.parse(backupStr);
-            } catch (e) {
-              console.error("Backup syntax err", e);
-            }
-          }
-
           if (localBackup && localBackup.novels && localBackup.novels.length > 0) {
             const syncedNovels = [...dbNovels];
             let hasNewMerge = false;
